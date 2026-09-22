@@ -86,6 +86,23 @@ app.get("/api/status", (_req, res) => res.json({
   model
 }));
 
+
+app.get("/api/selftest", async (_req, res) => {
+  if (!n8nBase) return res.status(503).json({ok:false,n8n:"NOT_CONNECTED"});
+  try {
+    const nr = await fetch(`${n8nBase}/webhook/tara-viora-command`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({command:"اكتب 3 أفكار محتوى لسيروم فيتامين C",source:"selftest"})
+    });
+    const raw = await nr.text();
+    let result; try { result = JSON.parse(raw); } catch { result = {raw}; }
+    res.status(nr.ok?200:502).json({ok:nr.ok,n8nStatus:nr.status,result});
+  } catch (err) {
+    res.status(502).json({ok:false,n8nStatus:"unreachable",error:String(err?.message||err)});
+  }
+});
+
 app.post("/api/command", async (req, res) => {
   const q = String(req.body?.command || "").trim();
   if (!q) return res.status(400).json({ ok:false, error:"command_required" });
