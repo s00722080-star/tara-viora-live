@@ -180,4 +180,19 @@ app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.h
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`TARA VIORA Command Center listening on ${port}`);
+  if (n8nBase) {
+    setTimeout(async () => {
+      try {
+        const r = await fetch(`${n8nBase}/webhook/tara-viora-command`, {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({command:"اختبار ربط TARA VIORA",source:"startup-selftest"})
+        });
+        const body = await r.text();
+        console.log("TARA_VIORA_STARTUP_SELFTEST", r.status, body.slice(0,1000));
+      } catch (e) {
+        console.error("TARA_VIORA_STARTUP_SELFTEST_ERROR", e?.message || e);
+      }
+    }, 4000);
+  }
 });
