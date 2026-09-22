@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "tara-viora-schedule",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "w",
@@ -15,7 +15,8 @@
       "position": [
         0,
         0
-      ]
+      ],
+      "webhookId": "77777777-abcd-4777-8777-777777777777"
     },
     {
       "parameters": {
@@ -73,7 +74,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "active": false,
+  "active": true,
   "versionId": "tv-scheduler-v1",
   "id": "77777777-7777-4777-8777-777777777777"
 }
