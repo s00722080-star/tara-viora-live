@@ -1,0 +1,78 @@
+{
+  "name": "TARA VIORA — Data Research",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tara-viora-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w",
+      "name": "Data Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"research_brief\",query:b.command||b.query||\"\",sourcesPolicy:\"public_or_authorized_only\",b2bCategories:[\"pharmacies\",\"beauty centers\",\"clinics\",\"distributors\"],scoring:{relevance:40,publicContact:20,location:20,b2bPotential:20},status:\"ready_for_data_provider\",provider:\"NOT_CONNECTED\"}}];"
+      },
+      "id": "p",
+      "name": "Build Research Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        230,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "r",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Data Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Research Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Research Brief": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "tv-data-v1"
+}
