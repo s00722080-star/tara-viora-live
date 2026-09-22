@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "tara-viora-whatsapp",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "w",
@@ -15,7 +15,8 @@
       "position": [
         0,
         0
-      ]
+      ],
+      "webhookId": "55555555-eeee-4555-8555-555555555555"
     },
     {
       "parameters": {
@@ -73,7 +74,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "active": false,
+  "active": true,
   "versionId": "tv-wa-v1",
   "id": "55555555-5555-4555-8555-555555555555"
 }
