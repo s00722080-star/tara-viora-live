@@ -1,0 +1,78 @@
+{
+  "name": "TARA VIORA — Content Studio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tara-viora-content",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w",
+      "name": "Content Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body||$json; const q=String(b.command||b.prompt||\"\"); const hooks=[`قبل ما تحكمي على المنتج… ${q}`,`من المختبر لروتينك: ${q}`,`الفرق الحقيقي يبدأ من التفاصيل: ${q}`,`ليش هالخطوة مهمة ببشرتك؟ ${q}`,`روتين أبسط، قرار أذكى: ${q}`]; return [{json:{ok:true,type:\"content_draft\",command:q,hooks,status:\"draft\",approvalRequired:true}}];"
+      },
+      "id": "c",
+      "name": "Create Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        230,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "r",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Content Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Draft": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "tv-content-v1"
+}
