@@ -1,0 +1,824 @@
+[
+  {
+    "name": "TARA VIORA — Executive Router",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-command",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "webhook-command",
+        "name": "Command Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const body=$json.body||$json; const q=String(body.command||body.prompt||\"\").trim(); let route=\"content\"; if(/فيديو|ريل|reel/i.test(q)) route=\"render\"; else if(/سوق|منافس|بحث|داتا|صيدلي|عياد|b2b/i.test(q)) route=\"data\"; else if(/واتساب|whatsapp/i.test(q)) route=\"whatsapp\"; else if(/تحليل|نتائج|analytics/i.test(q)) route=\"analytics\"; else if(/جدول|جدولة|موعد|schedule/i.test(q)) route=\"scheduler\"; return [{json:{command:q,route,source:\"tara-viora\",requiresApproval:/نشر|صرف|ممولة|render|رندر|واتساب|whatsapp/i.test(q)}}];"
+        },
+        "id": "route-code",
+        "name": "Route Command",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          220,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "content",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "content"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "render",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "render"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "data",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "data"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "whatsapp",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "whatsapp"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "analytics",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "analytics"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{$json.route}}",
+                      "rightValue": "scheduler",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "scheduler"
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "id": "switch",
+        "name": "Route",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          450,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ {ok:true, accepted:true, route:$json.route, command:$json.command, approvalRequired:$json.requiresApproval, message:'TARA VIORA command accepted'} }}",
+          "options": {}
+        },
+        "id": "respond",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          700,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Command Webhook": {
+        "main": [
+          [
+            {
+              "node": "Route Command",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route Command": {
+        "main": [
+          [
+            {
+              "node": "Route",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-exec-router-v1"
+  },
+  {
+    "name": "TARA VIORA — Content Studio",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-content",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Content Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; const q=String(b.command||b.prompt||\"\"); const hooks=[`قبل ما تحكمي على المنتج… ${q}`,`من المختبر لروتينك: ${q}`,`الفرق الحقيقي يبدأ من التفاصيل: ${q}`,`ليش هالخطوة مهمة ببشرتك؟ ${q}`,`روتين أبسط، قرار أذكى: ${q}`]; return [{json:{ok:true,type:\"content_draft\",command:q,hooks,status:\"draft\",approvalRequired:true}}];"
+        },
+        "id": "c",
+        "name": "Create Draft",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Content Webhook": {
+        "main": [
+          [
+            {
+              "node": "Create Draft",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Draft": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-content-v1"
+  },
+  {
+    "name": "TARA VIORA — Real Video",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-render",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Render Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"real_video_plan\",status:\"preview_plan\",hook:\"1–2 sec hook\",steps:[\"select best shots\",\"cinematic pacing\",\"premium color\",\"clean type/subtitles\",\"sound design\",\"preview\"],finalRenderBlocked:true,approvalRequired:true,externalRenderer:\"NOT_CONNECTED\"}}];"
+        },
+        "id": "p",
+        "name": "Build Video Plan",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Render Webhook": {
+        "main": [
+          [
+            {
+              "node": "Build Video Plan",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Video Plan": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-render-v1"
+  },
+  {
+    "name": "TARA VIORA — Data Research",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-data",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Data Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"research_brief\",query:b.command||b.query||\"\",sourcesPolicy:\"public_or_authorized_only\",b2bCategories:[\"pharmacies\",\"beauty centers\",\"clinics\",\"distributors\"],scoring:{relevance:40,publicContact:20,location:20,b2bPotential:20},status:\"ready_for_data_provider\",provider:\"NOT_CONNECTED\"}}];"
+        },
+        "id": "p",
+        "name": "Build Research Brief",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Data Webhook": {
+        "main": [
+          [
+            {
+              "node": "Build Research Brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Research Brief": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-data-v1"
+  },
+  {
+    "name": "TARA VIORA — WhatsApp",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-whatsapp",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "WhatsApp Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"whatsapp_draft\",message:b.message||b.command||\"\",sendBlocked:true,approvalRequired:true,provider:\"NOT_CONNECTED\"}}];"
+        },
+        "id": "p",
+        "name": "Prepare Message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "WhatsApp Webhook": {
+        "main": [
+          [
+            {
+              "node": "Prepare Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Message": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-wa-v1"
+  },
+  {
+    "name": "TARA VIORA — Analytics",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-analytics",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Analytics Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"analytics_request\",metrics:b.metrics||[\"reach\",\"engagement\",\"clicks\",\"conversions\"],status:\"waiting_for_platform_data\",provider:\"NOT_CONNECTED\"}}];"
+        },
+        "id": "p",
+        "name": "Build Analytics Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Analytics Webhook": {
+        "main": [
+          [
+            {
+              "node": "Build Analytics Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Analytics Request": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-analytics-v1"
+  },
+  {
+    "name": "TARA VIORA — Scheduler",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-schedule",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Scheduler Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"schedule_request\",requestedAt:b.when||null,status:\"planned\",publishingBlocked:true,approvalRequired:true}}];"
+        },
+        "id": "p",
+        "name": "Plan Schedule",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Scheduler Webhook": {
+        "main": [
+          [
+            {
+              "node": "Plan Schedule",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Plan Schedule": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-scheduler-v1"
+  },
+  {
+    "name": "TARA VIORA — Approval",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-approval",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w",
+        "name": "Approval Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; const decision=String(b.decision||b.status||\"\").toLowerCase(); const approved=[\"approved\",\"approve\",\"موافق\",\"موافقة\"].includes(decision); return [{json:{ok:true,decision:approved?\"approved\":\"rejected\",publishing_allowed:approved,spend_allowed:approved,final_render_allowed:approved}}];"
+        },
+        "id": "p",
+        "name": "Apply Approval Gate",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "r",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Approval Webhook": {
+        "main": [
+          [
+            {
+              "node": "Apply Approval Gate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply Approval Gate": {
+        "main": [
+          [
+            {
+              "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": false,
+    "versionId": "tv-approval-v1"
+  }
+]
