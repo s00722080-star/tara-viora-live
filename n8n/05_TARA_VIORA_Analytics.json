@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "tara-viora-analytics",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "w",
@@ -15,7 +15,8 @@
       "position": [
         0,
         0
-      ]
+      ],
+      "webhookId": "66666666-ffff-4666-8666-666666666666"
     },
     {
       "parameters": {
@@ -73,7 +74,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "active": false,
+  "active": true,
   "versionId": "tv-analytics-v1",
   "id": "66666666-6666-4666-8666-666666666666"
 }
