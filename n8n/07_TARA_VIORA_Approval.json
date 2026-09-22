@@ -1,0 +1,78 @@
+{
+  "name": "TARA VIORA — Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tara-viora-approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body||$json; const decision=String(b.decision||b.status||\"\").toLowerCase(); const approved=[\"approved\",\"approve\",\"موافق\",\"موافقة\"].includes(decision); return [{json:{ok:true,decision:approved?\"approved\":\"rejected\",publishing_allowed:approved,spend_allowed:approved,final_render_allowed:approved}}];"
+      },
+      "id": "p",
+      "name": "Apply Approval Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        230,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "r",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Apply Approval Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Approval Gate": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "tv-approval-v1"
+}
