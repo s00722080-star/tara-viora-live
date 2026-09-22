@@ -12,6 +12,7 @@ const port = process.env.PORT || 3000;
 
 const client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 const model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+const n8nBase = String(process.env.N8N_BASE_URL || "").replace(/\/$/,"");
 
 const modules = [
   "فيديو حقيقي ومونتاج بروفيشنال","توليد فيديو بالذكاء الاصطناعي","صور وإعلانات","Carousel",
@@ -79,6 +80,8 @@ app.post("/api/command", async (req, res) => {
 
   let answer = "";
   let aiStatus = "NOT_CONNECTED";
+  let automationStatus = "NOT_CONNECTED";
+  let automationResult = null;
 
   if (client) {
     try {
@@ -98,6 +101,23 @@ app.post("/api/command", async (req, res) => {
     answer = "تم توجيه المهمة داخليًا. الذكاء الاصطناعي الخارجي غير موصول بعد.";
   }
 
+  if (n8nBase) {
+    try {
+      const nr = await fetch(`${n8nBase}/webhook/tara-viora-command`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({command:q,module,moduleName:modules[module],source:"tara-viora-command-center"})
+      });
+      const textBody = await nr.text();
+      try { automationResult = JSON.parse(textBody); } catch { automationResult = {raw:textBody}; }
+      automationStatus = nr.ok ? "CONNECTED" : "ERROR";
+    } catch (err) {
+      console.error("n8n error:", err?.message || err);
+      automationStatus = "ERROR";
+      automationResult = {error:"n8n_unreachable"};
+    }
+  }
+
   res.json({
     ok:true,
     command:q,
@@ -106,6 +126,8 @@ app.post("/api/command", async (req, res) => {
     orders,
     answer,
     aiStatus,
+    automationStatus,
+    automationResult,
     links:{
       module:`#module-${module + 1}`,
       tasks:"#tasks",
