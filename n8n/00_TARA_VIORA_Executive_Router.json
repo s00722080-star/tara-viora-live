@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "tara-viora-command",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-command",
@@ -15,7 +15,8 @@
       "position": [
         0,
         0
-      ]
+      ],
+      "webhookId": "11111111-aaaa-4111-8111-111111111111"
     },
     {
       "parameters": {
@@ -133,7 +134,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "active": false,
+  "active": true,
   "versionId": "tv-exec-router-v1",
   "id": "11111111-1111-4111-8111-111111111111"
 }
