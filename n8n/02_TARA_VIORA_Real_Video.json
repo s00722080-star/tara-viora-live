@@ -1,0 +1,78 @@
+{
+  "name": "TARA VIORA — Real Video",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tara-viora-render",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w",
+      "name": "Render Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"real_video_plan\",status:\"preview_plan\",hook:\"1–2 sec hook\",steps:[\"select best shots\",\"cinematic pacing\",\"premium color\",\"clean type/subtitles\",\"sound design\",\"preview\"],finalRenderBlocked:true,approvalRequired:true,externalRenderer:\"NOT_CONNECTED\"}}];"
+      },
+      "id": "p",
+      "name": "Build Video Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        230,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "r",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Render Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Video Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Video Plan": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "tv-render-v1"
+}
