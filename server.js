@@ -51,6 +51,21 @@ function buildOrders(module) {
   ];
 }
 
+function localFallbackAnswer(q, module) {
+  const label = modules[module];
+  return `تم استلام الطلب وتشغيله بوضع الأتمتة المحلي مؤقتًا إلى أن يتم تمويل OpenAI API.
+
+المهمة: ${q}
+الوحدة: ${label}
+
+ما سيتم تنفيذه الآن:
+1) تحويل الطلب إلى Brief واضح.
+2) إنشاء مسودة أولية داخل الوحدة المناسبة.
+3) إرسال أي خطوة نشر/صرف/إرسال/Final Render إلى بوابة الموافقة قبل التنفيذ.
+
+يمكنك متابعة نتيجة الأتمتة من القسم الظاهر أسفل هذا الرد.`;
+}
+
 const systemPrompt = `
 أنت المدير التنفيذي الذكي الداخلي لشركة TARA VIORA لمستحضرات التجميل.
 تحدث بالعربية الواضحة، واستخدم أسلوبًا فاخرًا هادئًا وعلميًا وغير مبالغ.
@@ -94,11 +109,17 @@ app.post("/api/command", async (req, res) => {
       aiStatus = "CONNECTED";
     } catch (err) {
       console.error("OpenAI error:", err?.message || err);
-      answer = "تم توجيه المهمة داخليًا، لكن تعذر الحصول على إجابة من الذكاء الاصطناعي الآن. تحققي من رصيد أو صلاحية OpenAI API.";
-      aiStatus = "ERROR";
+      const msg = String(err?.message || err || "");
+      if (msg.includes("429") || /no credits|insufficient_quota/i.test(msg)) {
+        answer = localFallbackAnswer(q, module);
+        aiStatus = "NO_CREDITS";
+      } else {
+        answer = localFallbackAnswer(q, module);
+        aiStatus = "ERROR";
+      }
     }
   } else {
-    answer = "تم توجيه المهمة داخليًا. الذكاء الاصطناعي الخارجي غير موصول بعد.";
+    answer = localFallbackAnswer(q, module);
   }
 
   if (n8nBase) {
