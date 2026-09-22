@@ -177,7 +177,8 @@ try{
 }finally{
   runCommand.disabled=false;
   runCommand.textContent="تشغيل الفريق";
-}}\nvoiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
+}}
+voiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
 function renderStats(){sTasks.textContent=state.tasks.length;sApprovals.textContent=state.approvals.filter(x=>x.status==="pending").length;sLeads.textContent=state.leads.length}
 function renderAll(){renderModules();renderTasks();renderApprovals();renderCalendar();renderCRM();renderBudget();renderIntegrations();renderStats()}
 renderAll();
