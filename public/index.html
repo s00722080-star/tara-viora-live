@@ -170,7 +170,8 @@ try{
       '<button class="btn alt" onclick="view(\'approvals\')">الموافقات</button>'+
       '<button class="btn alt" onclick="view(\'integrations\')">الربط</button>'+
     '</div>'+
-    '<div class="muted small" style="margin-top:10px">AI: '+data.aiStatus+' • الوحدة: '+data.moduleName+'</div>';
+    (data.automationResult?'<div class="gold" style="margin-top:14px"><strong>نتيجة الأتمتة</strong></div><pre class="item" style="white-space:pre-wrap;direction:ltr;text-align:left">'+escapeHtml(JSON.stringify(data.automationResult,null,2))+'</pre>':'')+
+    '<div class="muted small" style="margin-top:10px">AI: '+data.aiStatus+' • Automation: '+(data.automationStatus||"NOT_CONNECTED")+' • الوحدة: '+data.moduleName+'</div>';
   save();
 }catch(e){
   directorReply.innerHTML='<strong>تعذر تنفيذ الأمر.</strong><div class="muted small">'+(e.message||"خطأ غير معروف")+'</div>';
@@ -179,6 +180,7 @@ try{
   runCommand.textContent="تشغيل الفريق";
 }}
 voiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
+function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function renderStats(){sTasks.textContent=state.tasks.length;sApprovals.textContent=state.approvals.filter(x=>x.status==="pending").length;sLeads.textContent=state.leads.length}
 function renderAll(){renderModules();renderTasks();renderApprovals();renderCalendar();renderCRM();renderBudget();renderIntegrations();renderStats()}
 renderAll();
