@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const port = process.env.PORT || 3000;
 
 const client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const model = process.env.OPENAI_MODEL || "gpt-6-astra";
+const model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 
 const modules = [
   "فيديو حقيقي ومونتاج بروفيشنال","توليد فيديو بالذكاء الاصطناعي","صور وإعلانات","Carousel",
