@@ -117,7 +117,7 @@ const seed={tasks:[],approvals:[],calendar:[],spend:[],budget:500,leads:[
 let state=load();
 function load(){try{return JSON.parse(localStorage.getItem("tvcc")||"null")||structuredClone(seed)}catch{return structuredClone(seed)}}
 function save(){localStorage.setItem("tvcc",JSON.stringify(state));renderAll()}
-function view(id){document.querySelectorAll("main section").forEach(x=>x.classList.add("hide"));document.getElementById(id).classList.remove("hide");document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===id))}
+function view(id){document.querySelectorAll("main section").forEach(x=>x.classList.add("hide"));document.getElementById(id).classList.remove("hide");document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===id));history.replaceState(null,"","#"+id)}
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>view(b.dataset.view));
 function renderModules(){modules.innerHTML=MODULES.map((m,i)=>`<div class="module" onclick="openModule(${i})"><div class="n">MODULE ${String(i+1).padStart(2,"0")}</div><h3>${m[0]}</h3><div class="muted small">${m[1]}</div><div class="small" style="margin-top:8px">${m[2]}</div></div>`).join("")}
 function openModule(i){const m=MODULES[i];const hooks=generateHooks(m[0]);modalBody.innerHTML=`<div class="muted small">MODULE ${String(i+1).padStart(2,"0")} • ${m[1]}</div><h2 class="gold">${m[0]}</h2><p>${m[2]}</p><div class="panel" style="margin:12px 0"><h3>Hook Engine</h3>${hooks.map(h=>`<div class="item hook"><strong>${h}</strong><span class="muted small">clarity 90 · relevance 92 · specificity 86 · brand fit 94 · non-copying 100 · testability 88</span></div>`).join("")}</div><button class="btn" onclick="createModuleTask(${i})">إنشاء مهمة في هذه الوحدة</button>`;modal.classList.remove("hide")}
@@ -148,19 +148,36 @@ function saveIntegrations(){state.integrations.baseUrl=baseUrl.value.trim();stat
 function exportData(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download="tara-viora-backup.json";a.click()}
 importFile.onchange=async e=>{try{state=JSON.parse(await e.target.files[0].text());save();alert("تم الاستيراد")}catch{alert("ملف غير صالح")}}
 function resetData(){if(confirm("إعادة تعيين البيانات؟")){state=structuredClone(seed);save()}}
-runCommand.onclick=()=>{const q=command.value.trim();if(!q)return;let module=6;if(/فيديو|ريل|reel/i.test(q))module=0;if(/اعلان|حملة|ممول/i.test(q))module=5;if(/سوق|منافس/i.test(q))module=8;if(/صيدلي|عياد|b2b|داتا/i.test(q))module=12;if(/واتساب/i.test(q))module=16;
-let answer="";
-if(/سوق|منافس/i.test(q)){answer=`<strong>النتيجة الأولية:</strong><br>1) السوق اللبناني مناسب أكثر للمنتجات التي تجمع بين السعر المدروس والثقة والشرح العلمي الواضح.<br>2) أفضل محاور الدراسة: الصيدليات، مراكز التجميل، العيادات، الموزعون، والبيع المباشر عبر السوشيال.<br>3) يجب مقارنة المنافسين بحسب السعر، الادعاءات، نوع المحتوى، نقاط البيع، العروض، وتجربة العميل.<br>4) الخطوة التالية: جمع بيانات فعلية من السوق ثم ترتيب الفرص حسب B2B Fit Score.<br><br><span class="muted small">هذه إجابة تخطيط محلية. الربط مع بيانات السوق الحية غير موصول بعد.</span>`;}
-else if(/فيديو|ريل|reel/i.test(q)){answer=`<strong>خطة الفيديو:</strong><br>Hook أول 1–2 ثانية → 5 زوايا هوك → ترتيب اللقطات → مونتاج سينمائي فاخر → نصوص قصيرة → Preview → QC → موافقتك → Final Render.<br><br><strong>3 Hooks مبدئية:</strong><br>• قبل ما تحكمي على المنتج، شوفي شو بيصير من أول استخدام.<br>• من المختبر للسوق: ليش هالتركيبة معمولة للبشرة بهالمناخ؟<br>• مش كل سيروم بيعطي نفس الإحساس… الفرق بالتفاصيل.`;}
-else if(/اعلان|حملة|ممول/i.test(q)){answer=`<strong>خطة الحملة:</strong><br>هدف تجاري واضح → 3 زوايا إعلانية → 3 Creatives → اختبار صغير → مراجعة النتائج → موافقتك قبل أي صرف → إطلاق → Analytics.<br><br><span class="muted small">لن يتم صرف أي مبلغ قبل الموافقة.</span>`;}
-else if(/صيدلي|عياد|b2b|داتا/i.test(q)){answer=`<strong>خطة B2B:</strong><br>جمع بيانات عامة → تنظيفها → تصنيف حسب الفئة والمنطقة → Fit Score من 100 → ترتيب A/B/C/D → اقتراح زاوية تواصل شخصية لكل جهة.<br><br><span class="muted small">التواصل الترويجي لا يُرسل تلقائيًا.</span>`;}
-else if(/واتساب/i.test(q)){answer=`<strong>خطة WhatsApp:</strong><br>تصنيف نية الرسالة → صياغة رد مقترح → مراجعتك → إرسال يدوي/مربوط لاحقًا. لا يوجد إرسال ترويجي تلقائي.`;}
-else {answer=`<strong>الخطة الأولية:</strong><br>بحث مختصر → 5 Hooks → Draft → QC → موافقتك → جدولة/تنفيذ.<br><br><strong>5 Hooks مقترحة:</strong><br>${generateHooks(q).map(x=>"• "+x).join("<br>")}`;}
-const task={id:Date.now(),title:q,module,status:"queued",step:0,created:new Date().toLocaleString(),result:answer};
-state.tasks.unshift(task);
-directorReply.innerHTML=`<div class="gold"><strong>إجابة المدير التنفيذي</strong></div><div style="margin-top:8px">${answer}</div><div class="muted small" style="margin-top:10px">الوحدة: ${MODULES[module][0]}</div>`;
-directorReply.classList.remove("hide");save()}
-voiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
+runCommand.onclick=async()=>{const q=command.value.trim();if(!q)return;
+runCommand.disabled=true;runCommand.textContent="جاري تشغيل الفريق...";
+directorReply.classList.remove("hide");
+directorReply.innerHTML='<span class="muted">جاري تحليل الطلب وإصدار الأوامر…</span>';
+try{
+  const r=await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command:q})});
+  const data=await r.json();
+  if(!data.ok)throw new Error(data.error||"command_failed");
+  const ordersHtml=data.orders.map((o,i)=>'<div class="item"><div class="muted small">ORDER '+(i+1)+' • '+o.team+'</div><strong>'+o.order+'</strong><span class="status ok">ISSUED</span></div>').join("");
+  const task={id:Date.now(),title:q,module:data.module,status:"running",step:0,created:new Date().toLocaleString(),result:data.answer};
+  state.tasks.unshift(task);
+  directorReply.innerHTML=
+    '<div class="gold"><strong>إجابة المدير التنفيذي</strong></div>'+
+    '<div style="margin-top:10px;white-space:pre-wrap;line-height:1.8">'+(data.answer||"")+'</div>'+
+    '<div class="gold" style="margin-top:14px"><strong>الأوامر الصادرة للفريق</strong></div>'+
+    '<div class="list" style="margin-top:8px">'+ordersHtml+'</div>'+
+    '<div class="row" style="margin-top:12px">'+
+      '<button class="btn alt" onclick="openModule('+data.module+')">فتح الوحدة المنفذة</button>'+
+      '<button class="btn alt" onclick="view(\'tasks\')">فتح المهام</button>'+
+      '<button class="btn alt" onclick="view(\'approvals\')">الموافقات</button>'+
+      '<button class="btn alt" onclick="view(\'integrations\')">الربط</button>'+
+    '</div>'+
+    '<div class="muted small" style="margin-top:10px">AI: '+data.aiStatus+' • الوحدة: '+data.moduleName+'</div>';
+  save();
+}catch(e){
+  directorReply.innerHTML='<strong>تعذر تنفيذ الأمر.</strong><div class="muted small">'+(e.message||"خطأ غير معروف")+'</div>';
+}finally{
+  runCommand.disabled=false;
+  runCommand.textContent="تشغيل الفريق";
+}}\nvoiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
 function renderStats(){sTasks.textContent=state.tasks.length;sApprovals.textContent=state.approvals.filter(x=>x.status==="pending").length;sLeads.textContent=state.leads.length}
 function renderAll(){renderModules();renderTasks();renderApprovals();renderCalendar();renderCRM();renderBudget();renderIntegrations();renderStats()}
 renderAll();
