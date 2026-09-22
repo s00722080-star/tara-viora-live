@@ -20,7 +20,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const body=$json.body||$json; const q=String(body.command||body.prompt||\"\").trim(); let route=\"content\"; if(/فيديو|ريل|reel/i.test(q)) route=\"render\"; else if(/سوق|منافس|بحث|داتا|صيدلي|عياد|b2b/i.test(q)) route=\"data\"; else if(/واتساب|whatsapp/i.test(q)) route=\"whatsapp\"; else if(/تحليل|نتائج|analytics/i.test(q)) route=\"analytics\"; else if(/جدول|جدولة|موعد|schedule/i.test(q)) route=\"scheduler\"; return [{json:{command:q,route,source:\"tara-viora\",requiresApproval:/نشر|صرف|ممولة|render|رندر|واتساب|whatsapp/i.test(q)}}];"
+          "jsCode": "const body=$json.body||$json; const q=String(body.command||body.prompt||\"\").trim(); let route=\"content\", target=\"tara-viora-content\"; if(/فيديو|ريل|reel/i.test(q)){route=\"render\";target=\"tara-viora-render\";} else if(/سوق|منافس|بحث|داتا|صيدلي|عياد|b2b/i.test(q)){route=\"data\";target=\"tara-viora-data\";} else if(/واتساب|whatsapp/i.test(q)){route=\"whatsapp\";target=\"tara-viora-whatsapp\";} else if(/تحليل|نتائج|analytics/i.test(q)){route=\"analytics\";target=\"tara-viora-analytics\";} else if(/جدول|جدولة|موعد|schedule/i.test(q)){route=\"scheduler\";target=\"tara-viora-schedule\";} return [{json:{command:q,route,target,source:\"tara-viora\",requiresApproval:/نشر|صرف|ممولة|render|رندر|واتساب|whatsapp/i.test(q)}}];"
         },
         "id": "route-code",
         "name": "Route Command",
@@ -33,153 +33,46 @@
       },
       {
         "parameters": {
-          "rules": {
-            "values": [
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "content",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "content"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "render",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "render"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "data",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "data"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "whatsapp",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "whatsapp"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "analytics",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "analytics"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": false,
-                    "leftValue": "",
-                    "typeValidation": "strict"
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{$json.route}}",
-                      "rightValue": "scheduler",
-                      "operator": {
-                        "type": "string",
-                        "operation": "equals"
-                      }
-                    }
-                  ]
-                },
-                "renameOutput": true,
-                "outputKey": "scheduler"
-              }
-            ]
-          },
+          "method": "POST",
+          "url": "={{'https://tara-viora-n8n-production.up.railway.app/webhook/' + $json.target}}",
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({command:$json.command, source:$json.source, route:$json.route, requiresApproval:$json.requiresApproval}) }}",
           "options": {
-            "fallbackOutput": "extra"
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
           }
         },
-        "id": "switch",
-        "name": "Route",
-        "type": "n8n-nodes-base.switch",
-        "typeVersion": 3.2,
+        "id": "dispatch",
+        "name": "Dispatch to Module",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
-          450,
+          470,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const routed=$(\"Route Command\").first().json; return [{json:{ok:true,accepted:true,route:routed.route,target:routed.target,approvalRequired:routed.requiresApproval,moduleResult:$json}}];"
+        },
+        "id": "merge",
+        "name": "Build Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
           0
         ]
       },
       {
         "parameters": {
           "respondWith": "json",
-          "responseBody": "={{ {ok:true, accepted:true, route:$json.route, command:$json.command, approvalRequired:$json.requiresApproval, message:'TARA VIORA command accepted'} }}",
+          "responseBody": "={{$json}}",
           "options": {}
         },
         "id": "respond",
@@ -187,7 +80,7 @@
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.4,
         "position": [
-          700,
+          950,
           0
         ]
       }
@@ -208,57 +101,26 @@
         "main": [
           [
             {
-              "node": "Route",
+              "node": "Dispatch to Module",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Route": {
+      "Dispatch to Module": {
         "main": [
           [
             {
-              "node": "Respond",
+              "node": "Build Result",
               "type": "main",
               "index": 0
             }
-          ],
-          [
-            {
-              "node": "Respond",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Respond",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Respond",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Respond",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Respond",
-              "type": "main",
-              "index": 0
-            }
-          ],
+          ]
+        ]
+      },
+      "Build Result": {
+        "main": [
           [
             {
               "node": "Respond",
