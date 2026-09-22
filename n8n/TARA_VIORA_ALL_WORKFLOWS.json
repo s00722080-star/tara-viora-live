@@ -6,7 +6,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-command",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "webhook-command",
@@ -16,7 +16,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "11111111-aaaa-4111-8111-111111111111"
       },
       {
         "parameters": {
@@ -134,7 +135,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-exec-router-v1",
     "id": "11111111-1111-4111-8111-111111111111"
   },
@@ -145,7 +146,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-content",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -155,7 +156,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "22222222-bbbb-4222-8222-222222222222"
       },
       {
         "parameters": {
@@ -213,7 +215,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-content-v1",
     "id": "22222222-2222-4222-8222-222222222222"
   },
@@ -224,7 +226,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-render",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -234,7 +236,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "33333333-cccc-4333-8333-333333333333"
       },
       {
         "parameters": {
@@ -292,7 +295,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-render-v1",
     "id": "33333333-3333-4333-8333-333333333333"
   },
@@ -303,7 +306,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-data",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -313,7 +316,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "44444444-dddd-4444-8444-444444444444"
       },
       {
         "parameters": {
@@ -371,7 +375,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-data-v1",
     "id": "44444444-4444-4444-8444-444444444444"
   },
@@ -382,7 +386,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-whatsapp",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -392,7 +396,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "55555555-eeee-4555-8555-555555555555"
       },
       {
         "parameters": {
@@ -450,7 +455,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-wa-v1",
     "id": "55555555-5555-4555-8555-555555555555"
   },
@@ -461,7 +466,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-analytics",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -471,7 +476,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "66666666-ffff-4666-8666-666666666666"
       },
       {
         "parameters": {
@@ -529,7 +535,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-analytics-v1",
     "id": "66666666-6666-4666-8666-666666666666"
   },
@@ -540,7 +546,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-schedule",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -550,7 +556,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "77777777-abcd-4777-8777-777777777777"
       },
       {
         "parameters": {
@@ -608,7 +615,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-scheduler-v1",
     "id": "77777777-7777-4777-8777-777777777777"
   },
@@ -619,7 +626,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "tara-viora-approval",
-          "responseMode": "lastNode",
+          "responseMode": "responseNode",
           "options": {}
         },
         "id": "w",
@@ -629,7 +636,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "webhookId": "88888888-dcba-4888-8888-888888888888"
       },
       {
         "parameters": {
@@ -687,7 +695,7 @@
     "settings": {
       "executionOrder": "v1"
     },
-    "active": false,
+    "active": true,
     "versionId": "tv-approval-v1",
     "id": "88888888-8888-4888-8888-888888888888"
   }
