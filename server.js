@@ -78,6 +78,31 @@ const systemPrompt = `
 
 app.get("/health", (_req, res) => res.json({ ok: true, app: "TARA VIORA Command Center" }));
 
+
+app.get("/api/integrations", (_req, res) => {
+  res.json({
+    ok:true,
+    providers:{
+      meta:{
+        label:"Instagram + Facebook",
+        connected:Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID)
+      },
+      whatsapp:{
+        label:"WhatsApp Business",
+        connected:Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID)
+      },
+      tiktok:{
+        label:"TikTok",
+        connected:Boolean(process.env.TIKTOK_ACCESS_TOKEN && process.env.TIKTOK_OPEN_ID)
+      },
+      higgsfield:{
+        label:"Higgsfield Video",
+        connected:Boolean(process.env.HF_API_KEY_ID && process.env.HF_API_KEY_SECRET)
+      }
+    }
+  });
+});
+
 app.get("/api/status", (_req, res) => res.json({
   ok: true,
   executive: client ? "OPENAI_CONNECTED" : "LOCAL_ROUTER",
