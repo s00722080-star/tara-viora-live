@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#0f0f0f"/>
+<title>TARA VIORA AI Marketing Command Center</title>
+<style>
+:root{--bg:#0b0b0c;--panel:#141416;--panel2:#1b1b1f;--text:#f4f0e7;--muted:#9f9a90;--gold:#d6b76d;--gold2:#f0d89a;--line:#3a3428;--ok:#5dbb9b;--warn:#e0ad5b;--bad:#d56e6e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#201c13 0,transparent 30%),var(--bg);color:var(--text);font-family:Tahoma,Arial,sans-serif}
+button,input,textarea,select{font:inherit}.wrap{display:grid;grid-template-columns:280px 1fr;min-height:100vh}.side{border-left:1px solid #26231c;background:#0e0e10;padding:22px;position:sticky;top:0;height:100vh;overflow:auto}.brand{letter-spacing:5px;font-family:Georgia,serif;color:var(--gold2);font-size:22px}.sub{font-size:11px;color:var(--muted);letter-spacing:2px}.nav{margin-top:24px;display:grid;gap:8px}.nav button{background:transparent;color:#d9d4c8;border:1px solid transparent;text-align:right;padding:11px 12px;border-radius:12px;cursor:pointer}.nav button:hover,.nav button.active{background:#18171a;border-color:#3a3428;color:var(--gold2)}.main{padding:26px;max-width:1400px;width:100%;margin:auto}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:20px}.badge{border:1px solid #35564b;background:#122019;color:#8ed2b9;padding:7px 10px;border-radius:999px;font-size:12px}.grid{display:grid;gap:16px}.cols{grid-template-columns:1.35fr .65fr}.panel{background:linear-gradient(180deg,#171719,#111113);border:1px solid #2d2a23;border-radius:18px;padding:18px;box-shadow:0 20px 60px #0006}.panel h2,.panel h3{margin:0 0 10px}.gold{color:var(--gold2)}.muted{color:var(--muted)}.director textarea{width:100%;min-height:110px;background:#0c0c0e;color:white;border:1px solid #373126;border-radius:14px;padding:14px;resize:vertical}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.btn{background:var(--gold);border:0;color:#17130a;padding:10px 15px;border-radius:12px;font-weight:700;cursor:pointer}.btn.alt{background:#1c1c20;color:#eee;border:1px solid #3a3428}.btn.danger{background:#3a1717;color:#ffc6c6;border:1px solid #6a2c2c}.stats{grid-template-columns:repeat(4,1fr)}.stat{padding:16px;border:1px solid #2d2a23;border-radius:16px;background:#121214}.num{font-size:26px;font-weight:800}.modules{grid-template-columns:repeat(3,1fr)}.module{padding:16px;border:1px solid #302b22;border-radius:16px;background:#121214;cursor:pointer;transition:.2s}.module:hover{transform:translateY(-2px);border-color:#7b6738}.module .n{color:var(--gold);font-size:11px}.module h3{font-size:15px}.status{font-size:11px;border-radius:999px;padding:4px 8px;border:1px solid #444}.ok{color:#91ddc0;border-color:#35564b}.wait{color:#f0c274;border-color:#684c24}.off{color:#c6c2ba;border-color:#444}.list{display:grid;gap:9px}.item{padding:12px;border:1px solid #2c2923;border-radius:12px;background:#111113}.item strong{display:block;margin-bottom:5px}.progress{height:7px;background:#27272a;border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;background:linear-gradient(90deg,#a98842,#e4ca86)}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid #2a2823;padding:10px;text-align:right}.table th{color:#c9b77d}.field{display:grid;gap:6px}.field input,.field select,.field textarea{background:#0d0d0f;color:#eee;border:1px solid #373126;border-radius:10px;padding:10px}.hide{display:none!important}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.small{font-size:12px}.hook{border-right:3px solid var(--gold);padding-right:10px}.pill{display:inline-block;border:1px solid #413926;border-radius:999px;padding:3px 7px;font-size:11px;color:#d6c48f}.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}.modal-card{width:min(860px,100%);max-height:88vh;overflow:auto;background:#111113;border:1px solid #55482b;border-radius:18px;padding:20px}.close{float:left;background:none;border:0;color:#aaa;font-size:22px;cursor:pointer}.footer{margin-top:24px;color:#6f6a61;font-size:11px;text-align:center}
+@media(max-width:1000px){.wrap{grid-template-columns:1fr}.side{height:auto;position:static;border-left:0;border-bottom:1px solid #26231c}.nav{grid-template-columns:repeat(4,1fr)}.cols,.modules,.stats{grid-template-columns:1fr 1fr}}@media(max-width:650px){.main{padding:14px}.nav{grid-template-columns:1fr 1fr}.cols,.modules,.stats{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.side{padding:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="side">
+  <div class="brand">TARA VIORA</div><div class="sub">AI MARKETING COMMAND CENTER</div>
+  <div class="nav" id="nav">
+    <button class="active" data-view="home">نظرة عامة</button>
+    <button data-view="tasks">المهام</button>
+    <button data-view="approvals">الموافقات</button>
+    <button data-view="calendar">التقويم</button>
+    <button data-view="crm">B2B CRM</button>
+    <button data-view="budget">الميزانية</button>
+    <button data-view="integrations">الربط</button>
+    <button data-view="backup">النسخ الاحتياطي</button>
+  </div>
+</aside>
+<main class="main">
+  <div class="top">
+    <div><div class="muted small">TARA VIORA</div><h1 style="margin:4px 0">مركز القيادة التسويقي الذكي</h1></div>
+    <div class="badge">● النظام جاهز محليًا</div>
+  </div>
+
+  <section id="home">
+    <div class="grid cols">
+      <div class="panel director">
+        <div class="section-title"><div><div class="muted small">المدير التنفيذي الذكي</div><h2>ماذا تريدين من فريق الذكاء الاصطناعي؟</h2></div><span class="pill">Human Approval ON</span></div>
+        <textarea id="command" placeholder="مثال: أنشئي Reel لإطلاق سيروم الإشراقة وبناء الثقة قبل البيع"></textarea>
+        <div class="row" style="margin-top:10px"><button class="btn" id="runCommand">تشغيل الفريق</button><button class="btn alt" id="voiceBtn">🎙️ إملاء صوتي</button></div>
+        <div id="directorReply" class="item hide" style="margin-top:12px"></div>
+      </div>
+      <div class="panel">
+        <h3>قواعد التنفيذ</h3>
+        <div class="list small muted">
+          <div>• لا نشر بدون موافقة بشرية.</div><div>• لا صرف إعلاني بدون موافقة.</div><div>• لا Final Render مدفوع بدون موافقة.</div><div>• لا API keys في الواجهة.</div><div>• الهوية: فاخر، هادئ، علمي، غير مبالغ.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid stats" style="margin-top:16px">
+      <div class="stat"><div class="muted small">المهام</div><div class="num" id="sTasks">0</div></div>
+      <div class="stat"><div class="muted small">بانتظار الموافقة</div><div class="num" id="sApprovals">0</div></div>
+      <div class="stat"><div class="muted small">B2B Leads</div><div class="num" id="sLeads">0</div></div>
+      <div class="stat"><div class="muted small">الميزانية المستخدمة</div><div class="num"><span id="sSpent">0</span> cr</div></div>
+    </div>
+
+    <div class="section-title" style="margin-top:22px"><h2>الوحدات الـ 17</h2><span class="muted small">اضغطي على أي وحدة لفتح مساحة العمل</span></div>
+    <div class="grid modules" id="modules"></div>
+  </section>
+
+  <section id="tasks" class="hide panel"><div class="section-title"><h2>Task Queue</h2><button class="btn alt" onclick="addManualTask()">+ مهمة</button></div><div id="taskList" class="list"></div></section>
+  <section id="approvals" class="hide panel"><div class="section-title"><h2>Approval Queue</h2><span class="pill">لن يتم تنفيذ الخطوات الحساسة تلقائيًا</span></div><div id="approvalList" class="list"></div></section>
+  <section id="calendar" class="hide panel"><div class="section-title"><h2>Content Calendar</h2><button class="btn alt" onclick="addCalendar()">+ إضافة</button></div><div id="calendarList" class="list"></div></section>
+  <section id="crm" class="hide panel">
+    <div class="section-title"><h2>B2B CRM</h2><button class="btn alt" onclick="addLead()">+ Lead</button></div>
+    <div style="overflow:auto"><table class="table"><thead><tr><th>الاسم</th><th>الفئة</th><th>المنطقة</th><th>التواصل</th><th>Fit Score</th><th>Priority</th></tr></thead><tbody id="crmRows"></tbody></table></div>
+  </section>
+  <section id="budget" class="hide panel"><div class="section-title"><h2>Monthly Budget Tracker</h2><button class="btn alt" onclick="addSpend()">+ تسجيل صرف</button></div><div class="item"><div class="row"><strong>المخصص: <span id="budgetTotal">500</span> cr</strong><span class="muted">المستخدم: <span id="budgetSpent">0</span> cr</span></div><div class="progress"><span id="budgetBar" style="width:0%"></span></div></div><div id="spendList" class="list" style="margin-top:12px"></div></section>
+  <section id="integrations" class="hide panel">
+    <div class="section-title"><h2>Integration Center</h2><span class="status off">NOT CONNECTED</span></div>
+    <div class="grid cols">
+      <div>
+        <div class="field"><label>n8n Base URL</label><input id="baseUrl" placeholder="https://your-n8n.example.com"></div>
+        <div id="webhooks" class="list" style="margin-top:12px"></div>
+        <button class="btn alt" style="margin-top:12px" onclick="saveIntegrations()">حفظ الروابط</button>
+      </div>
+      <div class="list" id="services"></div>
+    </div>
+  </section>
+  <section id="backup" class="hide panel"><div class="section-title"><h2>Backup / Export</h2></div><div class="row"><button class="btn" onclick="exportData()">تصدير JSON</button><label class="btn alt">استيراد JSON<input type="file" id="importFile" accept="application/json" hidden></label><button class="btn danger" onclick="resetData()">إعادة تعيين</button></div></section>
+  <div class="footer">TARA VIORA • Internal Marketing OS • 2026</div>
+</main>
+</div>
+
+<div id="modal" class="modal hide"><div class="modal-card"><button class="close" onclick="closeModal()">×</button><div id="modalBody"></div></div></div>
+
+<script>
+const MODULES=[
+["فيديو حقيقي ومونتاج بروفيشنال","Real Video & Pro Edit","تحليل اللقطات → 5 Hooks → Cinematic brief → Preview → QC → Approval → Final Render","render"],
+["توليد فيديو بالذكاء الاصطناعي","AI Video","Concept → Prompt → Preview → QC → Approval → Final Render","render"],
+["صور وإعلانات","Images & Ads","Research → Creative angles → Drafts → QC → Approval","content"],
+["Carousel","Carousel","Research → Structure → Copy → Design brief → QC → Approval","content"],
+["Motion Graphics","Motion Graphics","Storyboard → Motion brief → Preview → QC → Approval","render"],
+["حملات ممولة","Paid Campaigns","Business goal → Angles → Creatives → Small test → Approval → Launch → Analytics","approval"],
+["محتوى Organic","Organic Content","Research → 5 Hooks → Draft → QC → Approval → Schedule","content"],
+["تحليل السوق","Market Analysis","Signals → Segments → Opportunities → Risks → Next action","data"],
+["تحليل المنافسين","Competitor Analysis","Public research → Positioning → Gaps → Differentiation","data"],
+["Trends & Hooks","Trends & Hooks","Trend scan → Brand fit → 5 original hooks → Test plan","content"],
+["تحليل التعليقات وصوت العميل","Voice of Customer","price / trust / usage / safety / results / B2B → content ideas","analytics"],
+["أفضل وقت للنشر","Best Posting Time","Historical results → day/hour patterns → suggested windows","analytics"],
+["قاعدة بيانات العملاء والسوق B2B","B2B Data","Public data → clean → classify → Fit Score → CRM → human-reviewed outreach","data"],
+["Analytics","Analytics","Performance ranking → insight → next action","analytics"],
+["Budget / Credits","Budget / Credits","Track monthly credits, spend and approvals","approval"],
+["Approvals","Approvals","Approve / Reject publishing, spend, render, outreach","approval"],
+["WhatsApp","WhatsApp","Intent classification → draft reply only → no auto promotional send","whatsapp"]
+];
+const hookTypes=["problem","curiosity","expert/factory","contrarian","comparison","B2B","comment-to-content"];
+const webhookPaths={command:"/webhook/tara-viora-command",content:"/webhook/tara-viora-content",render:"/webhook/tara-viora-render",data:"/webhook/tara-viora-data",whatsapp:"/webhook/tara-viora-whatsapp",analytics:"/webhook/tara-viora-analytics",schedule:"/webhook/tara-viora-schedule",approval:"/webhook/tara-viora-approval"};
+const serviceNames=["LLM","Meta","TikTok","WhatsApp Business","Render Provider","Business Data Provider"];
+const seed={tasks:[],approvals:[],calendar:[],spend:[],budget:500,leads:[
+{name:"Light House Pharmacy",category:"Pharmacy",area:"Beirut",phone:"public",email:"",score:90},
+{name:"Skin Society",category:"Beauty Center",area:"Beirut",phone:"public",email:"public",score:95},
+{name:"Parapharm SAL",category:"Distributor",area:"Mount Lebanon",phone:"public",email:"public",score:92}
+],integrations:{baseUrl:"",paths:webhookPaths}};
+let state=load();
+function load(){try{return JSON.parse(localStorage.getItem("tvcc")||"null")||structuredClone(seed)}catch{return structuredClone(seed)}}
+function save(){localStorage.setItem("tvcc",JSON.stringify(state));renderAll()}
+function view(id){document.querySelectorAll("main section").forEach(x=>x.classList.add("hide"));document.getElementById(id).classList.remove("hide");document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===id))}
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>view(b.dataset.view));
+function renderModules(){modules.innerHTML=MODULES.map((m,i)=>`<div class="module" onclick="openModule(${i})"><div class="n">MODULE ${String(i+1).padStart(2,"0")}</div><h3>${m[0]}</h3><div class="muted small">${m[1]}</div><div class="small" style="margin-top:8px">${m[2]}</div></div>`).join("")}
+function openModule(i){const m=MODULES[i];const hooks=generateHooks(m[0]);modalBody.innerHTML=`<div class="muted small">MODULE ${String(i+1).padStart(2,"0")} • ${m[1]}</div><h2 class="gold">${m[0]}</h2><p>${m[2]}</p><div class="panel" style="margin:12px 0"><h3>Hook Engine</h3>${hooks.map(h=>`<div class="item hook"><strong>${h}</strong><span class="muted small">clarity 90 · relevance 92 · specificity 86 · brand fit 94 · non-copying 100 · testability 88</span></div>`).join("")}</div><button class="btn" onclick="createModuleTask(${i})">إنشاء مهمة في هذه الوحدة</button>`;modal.classList.remove("hide")}
+function closeModal(){modal.classList.add("hide")}
+function generateHooks(topic){return[
+`ماذا لو كان أكبر خطأ في ${topic} هو الخطوة التي تبدو صحيحة؟`,
+`قبل أن تختاري ${topic}، اسألي عن هذا التفصيل أولًا.`,
+`من داخل المختبر: كيف نقيّم ${topic} بدون وعود مبالغ فيها؟`,
+`مش كل ترند يستحق التجربة — خصوصًا مع ${topic}.`,
+`للصالونات والصيدليات: 3 أسئلة قبل إضافة ${topic} إلى التشكيلة.`
+]}
+function createModuleTask(i){const m=MODULES[i];state.tasks.unshift({id:Date.now(),title:m[0],module:i,status:"queued",step:0,created:new Date().toLocaleString()});save();closeModal();view("tasks")}
+function addManualTask(){const t=prompt("عنوان المهمة");if(!t)return;state.tasks.unshift({id:Date.now(),title:t,module:6,status:"queued",step:0,created:new Date().toLocaleString()});save()}
+function advanceTask(id){const t=state.tasks.find(x=>x.id===id);if(!t)return;t.step++;if(t.step>=2&&t.status!=="waiting_approval"){t.status="waiting_approval";state.approvals.unshift({id:Date.now(),taskId:id,title:t.title,type:"publish",status:"pending"})}else if(t.status!=="waiting_approval")t.status="running";save()}
+function renderTasks(){taskList.innerHTML=state.tasks.length?state.tasks.map(t=>`<div class="item"><div class="row"><strong style="flex:1">${t.title}</strong><span class="status ${t.status==="waiting_approval"?"wait":"ok"}">${t.status}</span></div><div class="muted small">Module ${t.module+1} • ${t.created}</div><div class="progress" style="margin:8px 0"><span style="width:${Math.min(100,(t.step+1)*25)}%"></span></div><button class="btn alt" onclick="advanceTask(${t.id})">تنفيذ الخطوة التالية</button></div>`).join(""):'<div class="muted">لا مهام بعد.</div>'}
+function approve(id,yes){const a=state.approvals.find(x=>x.id===id);if(!a)return;a.status=yes?"approved":"rejected";const t=state.tasks.find(x=>x.id===a.taskId);if(t)t.status=yes?"running":"rejected";save()}
+function renderApprovals(){approvalList.innerHTML=state.approvals.length?state.approvals.map(a=>`<div class="item"><strong>${a.title}</strong><div class="muted small">${a.type} • ${a.status}</div>${a.status==="pending"?`<div class="row" style="margin-top:8px"><button class="btn" onclick="approve(${a.id},true)">موافقة</button><button class="btn danger" onclick="approve(${a.id},false)">رفض</button></div>`:""}</div>`).join(""):'<div class="muted">لا موافقات معلقة.</div>'}
+function addCalendar(){const t=prompt("المحتوى");if(!t)return;const d=prompt("التاريخ");state.calendar.unshift({title:t,date:d||"غير محدد",channel:"Instagram"});save()}
+function renderCalendar(){calendarList.innerHTML=state.calendar.length?state.calendar.map(x=>`<div class="item"><strong>${x.title}</strong><span class="muted small">${x.date} • ${x.channel}</span></div>`).join(""):'<div class="muted">لا عناصر.</div>'}
+function priority(s){return s>=85?"A":s>=70?"B":s>=55?"C":"D"}
+function renderCRM(){crmRows.innerHTML=state.leads.map(x=>`<tr><td>${x.name}</td><td>${x.category}</td><td>${x.area}</td><td>${x.phone||x.email||"—"}</td><td>${x.score}</td><td><span class="pill">${priority(x.score)}</span></td></tr>`).join("")}
+function addLead(){const name=prompt("اسم الجهة");if(!name)return;const category=prompt("الفئة","Pharmacy")||"";const area=prompt("المنطقة","Beirut")||"";const contact=prompt("وسيلة تواصل عامة","public")||"";const score=Math.min(100,40+(contact?20:0)+(area?20:0)+20);state.leads.push({name,category,area,phone:contact,email:"",score});save()}
+function addSpend(){const label=prompt("سبب الصرف");const amount=Number(prompt("عدد Credits"));if(!label||!amount)return;state.spend.unshift({label,amount,date:new Date().toLocaleDateString()});save()}
+function renderBudget(){const spent=state.spend.reduce((a,b)=>a+b.amount,0);budgetTotal.textContent=state.budget;budgetSpent.textContent=spent;budgetBar.style.width=Math.min(100,spent/state.budget*100)+"%";spendList.innerHTML=state.spend.map(x=>`<div class="item"><strong>${x.label}</strong><span class="muted small">${x.amount} cr • ${x.date}</span></div>`).join("");sSpent.textContent=spent}
+function renderIntegrations(){baseUrl.value=state.integrations.baseUrl||"";webhooks.innerHTML=Object.entries(webhookPaths).map(([k,v])=>`<div class="field"><label>${k}</label><input id="wh_${k}" value="${state.integrations.paths?.[k]||v}"></div>`).join("");services.innerHTML=serviceNames.map(s=>`<div class="item"><div class="row"><strong style="flex:1">${s}</strong><span class="status off">NOT CONNECTED</span></div></div>`).join("")}
+function saveIntegrations(){state.integrations.baseUrl=baseUrl.value.trim();state.integrations.paths={};Object.keys(webhookPaths).forEach(k=>state.integrations.paths[k]=document.getElementById("wh_"+k).value);save();alert("تم حفظ الروابط فقط. لا توجد أسرار في الواجهة.")}
+function exportData(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download="tara-viora-backup.json";a.click()}
+importFile.onchange=async e=>{try{state=JSON.parse(await e.target.files[0].text());save();alert("تم الاستيراد")}catch{alert("ملف غير صالح")}}
+function resetData(){if(confirm("إعادة تعيين البيانات؟")){state=structuredClone(seed);save()}}
+runCommand.onclick=()=>{const q=command.value.trim();if(!q)return;let module=6;if(/فيديو|ريل|reel/i.test(q))module=0;if(/اعلان|حملة|ممول/i.test(q))module=5;if(/سوق|منافس/i.test(q))module=8;if(/صيدلي|عياد|b2b|داتا/i.test(q))module=12;if(/واتساب/i.test(q))module=16;state.tasks.unshift({id:Date.now(),title:q,module,status:"queued",step:0,created:new Date().toLocaleString()});directorReply.innerHTML=`<strong>تم تحليل الطلب.</strong><div class="muted small">سأوجه المهمة إلى: ${MODULES[module][0]}. الخطة المحلية جاهزة، وأي نشر/صرف/رندر نهائي سيتوقف عند بوابة الموافقة.</div>`;directorReply.classList.remove("hide");save()}
+voiceBtn.onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert("استخدمي إملاء لوحة المفاتيح لأن المتصفح لا يدعم الإدخال الصوتي هنا.");return}const r=new SR();r.lang="ar-LB";r.onresult=e=>command.value=e.results[0][0].transcript;r.start()}
+function renderStats(){sTasks.textContent=state.tasks.length;sApprovals.textContent=state.approvals.filter(x=>x.status==="pending").length;sLeads.textContent=state.leads.length}
+function renderAll(){renderModules();renderTasks();renderApprovals();renderCalendar();renderCRM();renderBudget();renderIntegrations();renderStats()}
+renderAll();
+</script>
+</body></html>
