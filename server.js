@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import OpenAI from "openai";
@@ -116,6 +116,15 @@ app.post("/api/auth/logout",requireAuth,(req,res)=>{
 
 // Health & setup-safe status
 app.get("/health",(_req,res)=>res.json({ok:true,app:"TARA VIORA Command Center",db:"SQLITE_PERSISTENT",dataDir:DATA_DIR}));
+app.get("/health/deep",async(_req,res)=>{
+  let dbOk=false,volumeOk=false,ffmpegOk=false,n8nOk=false,higgsfield="UNKNOWN";
+  try{dbOk=Number(one("SELECT 1 v").v)===1;}catch{}
+  try{const p=path.join(DATA_DIR,".health");fs.writeFileSync(p,"ok");volumeOk=fs.readFileSync(p,"utf8")==="ok";fs.unlinkSync(p);}catch{}
+  try{ffmpegOk=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0;}catch{}
+  if(n8nBase){try{const r=await postN8n("tara-viora-higgsfield-check",{source:"deep-health"});n8nOk=r.ok;higgsfield=r.data?.provider||"UNKNOWN";}catch{}}
+  const ok=dbOk&&volumeOk&&ffmpegOk&&n8nOk&&higgsfield==="HIGGSFIELD_READY";
+  res.status(ok?200:503).json({ok,db:dbOk?"READY":"ERROR",volume:volumeOk?"READY":"ERROR",ffmpeg:ffmpegOk?"READY":"ERROR",n8n:n8nOk?"READY":"ERROR",higgsfield});
+});
 app.get("/api/status",(req,res)=>res.json({ok:true,configured:authStatus(),executive:client?"OPENAI_CONFIGURED":"LOCAL_ROUTER",n8n:n8nBase?"CONNECTED":"NOT_CONNECTED",model}));
 
 // Everything below is private
@@ -593,4 +602,11 @@ setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
 app.use(express.static(path.join(__dirname,"public")));
 app.get("*",(_req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 
-app.listen(port,"0.0.0.0",()=>console.log(`TARA VIORA Production OS listening on ${port} • persistent DB ${DATA_DIR}`));
+app.listen(port,"0.0.0.0",()=>{
+  console.log(`TARA VIORA Production OS listening on ${port} • persistent DB ${DATA_DIR}`);
+  setTimeout(async()=>{try{
+    let hf="UNKNOWN";if(n8nBase){const r=await postN8n("tara-viora-higgsfield-check",{source:"startup-production-health"});hf=r.data?.provider||"UNKNOWN";}
+    const dbOk=Number(one("SELECT 1 v").v)===1,vol=fs.existsSync(DATA_DIR),ff=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0;
+    console.log("TARA_VIORA_PRODUCTION_HEALTH",JSON.stringify({db:dbOk,volume:vol,ffmpeg:ff,n8n:Boolean(n8nBase),higgsfield:hf}));
+  }catch(e){console.error("TARA_VIORA_PRODUCTION_HEALTH_ERROR",e?.message||e)}},3000);
+});
