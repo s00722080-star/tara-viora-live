@@ -147,6 +147,42 @@ CREATE TABLE IF NOT EXISTS brand_knowledge (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS voc_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT,
+  source_url TEXT,
+  external_id TEXT,
+  text TEXT NOT NULL,
+  category TEXT,
+  sentiment TEXT,
+  intent TEXT,
+  content_idea TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS voc_external_dedupe ON voc_items(platform,external_id);
+CREATE TABLE IF NOT EXISTS campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  platform TEXT,
+  objective TEXT,
+  audience_json TEXT DEFAULT '{}',
+  budget REAL DEFAULT 0,
+  status TEXT DEFAULT 'draft',
+  external_id TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS experiments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  hypothesis TEXT,
+  variant_a TEXT,
+  variant_b TEXT,
+  metric TEXT,
+  status TEXT DEFAULT 'planned',
+  result_json TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 const seed = db.prepare("SELECT count(*) c FROM brand_knowledge").get().c;
