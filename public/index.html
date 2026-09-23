@@ -29,7 +29,7 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
   <div class="brand">TARA VIORA</div><div class="tag">AI AGENCY OS</div>
   <div class="nav" id="nav">
     <button class="active" data-v="home">القيادة</button><button data-v="jobs">المهام</button><button data-v="approvals">الموافقات</button><button data-v="media">الوسائط</button>
-    <button data-v="content">المحتوى</button><button data-v="analytics">Analytics</button><button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="audit">السجل</button>
+    <button data-v="content">المحتوى</button><button data-v="analytics">Analytics</button><button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="maintenance">الصيانة الذاتية</button><button data-v="audit">السجل</button>
   </div>
   <button id="logoutBtn" class="btn alt" style="width:100%;margin-top:20px">تسجيل خروج</button>
 </aside>
@@ -166,6 +166,21 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
   </div>
 </section>
 
+<section id="maintenance" class="hide section">
+  <div class="panel">
+    <div class="toolbar">
+      <div><h2>بوت الصيانة الذاتية</h2><div class="muted small">يفحص النظام دوريًا ويعالج الأعطال التشغيلية الآمنة تلقائيًا، بدون نشر أو صرف أو تنفيذ حساس.</div></div>
+      <div class="row"><span id="maintStatus" class="status wait">IDLE</span><button class="btn" onclick="runMaintenance()">فحص وإصلاح الآن</button></div>
+    </div>
+    <div id="maintChecks" class="grid modules"></div>
+    <div class="grid cols section">
+      <div class="panel"><h3>إصلاحات تمت تلقائيًا</h3><div id="maintRepairs" class="list muted small"></div></div>
+      <div class="panel"><h3>أعطال تحتاج تدخّل</h3><div id="maintErrors" class="list muted small"></div></div>
+    </div>
+    <div class="item section"><b>المبرمج الذاتي</b><div class="muted small" style="margin-top:6px">مرحلة الصيانة التشغيلية مفعّلة الآن. تعديل الكود ونشر Patch تلقائي يحتاج ربط GitHub بصلاحية كتابة محدودة ومشفّرة مع اختبار وRollback قبل أي نشر.</div></div>
+  </div>
+</section>
+
 <section id="audit" class="hide section"><div class="panel"><div class="toolbar"><h2>Audit Log</h2><button class="btn alt" onclick="loadAudit()">تحديث</button></div><div id="auditList" class="list"></div></div></section>
 </main>
 </div>
@@ -200,7 +215,7 @@ async function boot(){const s=await fetch("/api/auth/status").then(r=>r.json());
 authBtn.onclick=async()=>{authMsg.textContent="";try{await api(authMode==="setup"?"/api/auth/setup":"/api/auth/login",{method:"POST",body:JSON.stringify({username:authUser.value.trim(),password:authPass.value})});authScreen.classList.add("hide");await refreshAll()}catch(e){authMsg.textContent=e.message==="password_min_10"?"كلمة المرور لازم تكون 10 أحرف على الأقل.":"تعذر الدخول/الإعداد."}}
 logoutBtn.onclick=async()=>{try{await api("/api/auth/logout",{method:"POST",body:"{}"})}catch{}showAuth("login")}
 
-document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="audit")loadAudit();});
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="maintenance")loadMaintenance();if(b.dataset.v==="audit")loadAudit();});
 function renderModules(){modules.innerHTML=MODULES.map((m,i)=>'<div class="card module" onclick="moduleInfo('+i+')"><div class="muted small">MODULE '+String(i+1).padStart(2,"0")+'</div><h3>'+m[0]+'</h3><div class="muted small">'+m[1]+'</div></div>').join("")}
 function moduleInfo(i){modalBody.innerHTML='<div class="muted small">MODULE '+(i+1)+'</div><h2 class="gold">'+MODULES[i][0]+'</h2><p>'+MODULES[i][1]+'</p><button class="btn" onclick="command.value=\'نفّذ مهمة ضمن وحدة '+MODULES[i][0]+'\';closeModal()">إرسال للمدير التنفيذي</button>';modal.classList.remove("hide")}
 function closeModal(){modal.classList.add("hide")}
@@ -249,6 +264,8 @@ async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken
 async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
 async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
 async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
+async function loadMaintenance(){try{const d=await api("/api/maintenance/status");maintStatus.textContent=d.status||"IDLE";maintStatus.className="status "+(d.status==="HEALTHY"?"ok":d.status==="CRITICAL"?"bad":"wait");const checks=d.checks||{};maintChecks.innerHTML=Object.entries(checks).map(([k,v])=>'<div class="card"><div class="muted small">'+esc(k)+'</div><div style="margin-top:6px"><span class="status '+(v==="READY"||v==="CONNECTED"?"ok":v==="ERROR"||v==="REAUTH_REQUIRED"?"bad":"wait")+'">'+esc(v)+'</span></div></div>').join("");maintRepairs.innerHTML=(d.repairs||[]).length?(d.repairs||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا إصلاحات مطلوبة حاليًا.</div>';maintErrors.innerHTML=(d.errors||[]).length?(d.errors||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا أعطال تحتاج تدخّل.</div>'}catch(e){maintStatus.textContent="ERROR";maintStatus.className="status bad";maintErrors.innerHTML='<div class="item">'+esc(e.message)+'</div>'}}
+async function runMaintenance(){maintStatus.textContent="RUNNING";maintStatus.className="status wait";try{await api("/api/maintenance/run",{method:"POST",body:"{}"});await loadMaintenance();alert("انتهى فحص الصيانة والإصلاح الذاتي.")}catch(e){alert("تعذر تشغيل الصيانة: "+e.message);await loadMaintenance()}}
 async function loadAudit(){const d=await api("/api/audit");auditList.innerHTML=d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.event)+'</b><span class="muted small">'+x.created_at+'</span></div><div class="muted small">'+esc(x.entity_type||"")+' '+esc(x.entity_id||"")+'</div></div>').join("")}
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 boot();
