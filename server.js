@@ -309,6 +309,27 @@ app.post("/api/jobs",(req,res)=>{
   const b=req.body||{}; const id=createJob({type:String(b.type||"task"),title:String(b.title||"Untitled"),payload:b.payload||{},provider:b.provider||null,requiresApproval:Boolean(b.requiresApproval),costEstimate:Number(b.costEstimate||0)});
   audit("job_created",{userId:req.user.id,entityType:"job",entityId:id,metadata:{type:b.type}}); res.json({ok:true,id});
 });
+
+app.post("/api/tiktok/test-publish/prepare",(req,res)=>{
+  const assetId=Number(req.body?.assetId||0);
+  const asset=one("SELECT id,name,mime,kind FROM assets WHERE id=?",assetId);
+  if(!asset)return res.status(404).json({ok:false,error:"asset_not_found"});
+  if(!String(asset.mime||"").startsWith("video/"))return res.status(400).json({ok:false,error:"video_asset_required"});
+  const title=String(req.body?.title||"TARA VIORA TikTok private test").slice(0,2200);
+  const payload={assetId,title,privacy_level:"SELF_ONLY",creatorConfirmed:true,brand_organic_toggle:true,is_aigc:false};
+  const jobId=createJob({
+    type:"tiktok_publish",
+    title:`TikTok private test — Asset #${assetId} ${asset.name}`,
+    payload,
+    provider:"TIKTOK",
+    requiresApproval:true,
+    costEstimate:0,
+    status:"waiting_approval"
+  });
+  audit("tiktok_test_publish_prepared",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{assetId,privacy:"SELF_ONLY"}});
+  res.json({ok:true,jobId,asset,privacy:"SELF_ONLY"});
+});
+
 app.get("/api/approvals",(req,res)=>res.json({ok:true,items:all(`SELECT a.*,j.type,j.provider,j.payload_json FROM approvals a JOIN jobs j ON j.id=a.job_id ORDER BY a.id DESC`).map(x=>({...x,payload:json(x.payload_json)}))}));
 app.post("/api/approvals/:id/decision",(req,res)=>{
   const id=Number(req.params.id), decision=String(req.body?.decision||"").toLowerCase();
