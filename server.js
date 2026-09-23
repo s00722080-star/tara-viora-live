@@ -79,7 +79,27 @@ const systemPrompt = `
 app.get("/health", (_req, res) => res.json({ ok: true, app: "TARA VIORA Command Center" }));
 
 
-app.get("/api/integrations", (_req, res) => {
+app.get("/api/integrations", async (_req, res) => {
+  let higgsfieldConnected = false;
+  let higgsfieldProvider = "NOT_CONNECTED";
+  if (n8nBase) {
+    try {
+      const hr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          command:"TARA VIORA Higgsfield integration status",
+          prompt:"Connectivity check only. Do not render.",
+          approved:false,
+          source:"integrations-status"
+        })
+      });
+      const raw = await hr.text();
+      let result; try { result = JSON.parse(raw); } catch { result = {}; }
+      higgsfieldProvider = result?.provider || "NOT_CONNECTED";
+      higgsfieldConnected = Boolean(hr.ok && result?.provider === "HIGGSFIELD_READY" && result?.finalRenderBlocked === true);
+    } catch {}
+  }
   res.json({
     ok:true,
     providers:{
@@ -97,7 +117,8 @@ app.get("/api/integrations", (_req, res) => {
       },
       higgsfield:{
         label:"Higgsfield Video",
-        connected:Boolean(process.env.HF_API_KEY_ID && process.env.HF_API_KEY_SECRET)
+        connected:higgsfieldConnected,
+        status:higgsfieldProvider
       }
     }
   });
