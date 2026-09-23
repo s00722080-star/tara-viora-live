@@ -312,6 +312,9 @@ app.post("/api/jobs",(req,res)=>{
 
 app.post("/api/tiktok/test-publish/prepare",(req,res)=>{
   const assetId=Number(req.body?.assetId||0);
+  const existing=all("SELECT id,status,payload_json FROM jobs WHERE type='tiktok_publish' AND status IN ('waiting_approval','approved','submitted') ORDER BY id DESC LIMIT 50")
+    .find(j=>Number(json(j.payload_json,{})?.assetId)===assetId);
+  if(existing)return res.status(409).json({ok:false,error:"tiktok_test_job_already_active",jobId:existing.id,status:existing.status});
   const asset=one("SELECT id,name,mime,kind FROM assets WHERE id=?",assetId);
   if(!asset)return res.status(404).json({ok:false,error:"asset_not_found"});
   if(!String(asset.mime||"").startsWith("video/"))return res.status(400).json({ok:false,error:"video_asset_required"});
@@ -330,7 +333,7 @@ app.post("/api/tiktok/test-publish/prepare",(req,res)=>{
   res.json({ok:true,jobId,asset,privacy:"SELF_ONLY"});
 });
 
-app.get("/api/approvals",(req,res)=>res.json({ok:true,items:all(`SELECT a.*,j.type,j.provider,j.payload_json FROM approvals a JOIN jobs j ON j.id=a.job_id ORDER BY a.id DESC`).map(x=>({...x,payload:json(x.payload_json)}))}));
+app.get("/api/approvals",(req,res)=>res.json({ok:true,items:all(`SELECT a.*,j.type,j.provider,j.status job_status,j.payload_json,j.result_json,j.error job_error FROM approvals a JOIN jobs j ON j.id=a.job_id ORDER BY a.id DESC`).map(x=>({...x,payload:json(x.payload_json),result:json(x.result_json,null)}))}));
 app.post("/api/approvals/:id/decision",(req,res)=>{
   const id=Number(req.params.id), decision=String(req.body?.decision||"").toLowerCase();
   const approved=["approve","approved","موافقة","موافق"].includes(decision);
@@ -806,6 +809,32 @@ app.post("/api/actions/tiktok",async(req,res)=>{
     res.status(502).json({ok:false,error:String(e.message)});
   }
 });
+
+app.post("/api/tiktok/status/:jobId",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.params.jobId));
+  if(!job||job.type!=="tiktok_publish")return res.status(404).json({ok:false,error:"tiktok_publish_job_not_found"});
+  const stored=json(job.result_json,{})||{};
+  const publishId=stored?.publish?.data?.publish_id||stored?.publish_id||null;
+  if(!publishId)return res.status(409).json({ok:false,error:"publish_id_missing",jobStatus:job.status});
+  try{
+    const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
+    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/status/fetch/",{
+      method:"POST",
+      headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},
+      body:JSON.stringify({publish_id:publishId})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d?.error?.code!=="ok")return res.status(502).json({ok:false,error:d?.error?.message||d?.error?.code||"tiktok_status_failed",raw:d});
+    const status=String(d?.data?.status||"UNKNOWN");
+    const mapped=status==="PUBLISH_COMPLETE"?"completed":status==="FAILED"?"failed":"submitted";
+    const merged={...stored,tiktokStatus:d.data,statusCheckedAt:new Date().toISOString()};
+    run("UPDATE jobs SET status=?,result_json=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      mapped,JSON.stringify(merged),status==="FAILED"?String(d?.data?.fail_reason||"tiktok_publish_failed"):null,job.id);
+    audit("tiktok_publish_status",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId,status,failReason:d?.data?.fail_reason||null}});
+    res.json({ok:true,jobId:job.id,publishId,status,jobStatus:mapped,data:d.data});
+  }catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
+});
+
 
 
 function graphVersion(){return getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0"}
