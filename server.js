@@ -249,6 +249,13 @@ app.get("/api/integrations/tiktok/connect",(req,res)=>{
   const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic",redirect_uri:redirectUri,state});
   res.json({ok:true,authorizeUrl:"https://www.tiktok.com/v2/auth/authorize/?"+q.toString(),redirectUri});
 });
+app.get("/api/integrations/tiktok/connect-publish",(req,res)=>{
+  const clientKey=getSecret("tiktok","client_key");if(!clientKey)return res.status(409).json({ok:false,error:"tiktok_developer_credentials_required"});
+  const state=crypto.randomBytes(24).toString("hex"),redirectUri=publicBaseUrl()+"/oauth/tiktok/callback";
+  res.setHeader("Set-Cookie",`tv_tiktok_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
+  const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic,video.publish",redirect_uri:redirectUri,state});
+  res.json({ok:true,authorizeUrl:"https://www.tiktok.com/v2/auth/authorize/?"+q.toString(),redirectUri});
+});
 app.get("/api/integrations/tiktok/check",async(req,res)=>{
   try{
     const token=await tiktokAccessToken();
@@ -632,7 +639,7 @@ setInterval(()=>{try{createBackupFile();audit("automatic_backup_created",{entity
 app.get("/api/integrations",async(req,res)=>{
   let hf="NOT_CONNECTED",tt="NOT_CONNECTED",meta="NOT_CONNECTED",wa="NOT_CONNECTED",el="NOT_CONNECTED";
   if(n8nBase){try{const r=await postN8n("tara-viora-higgsfield-check",{source:"integration-status"});hf=r.data?.provider||"NOT_CONNECTED";}catch{}}
-  try{const token=await tiktokAccessToken();if(token){const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});const d=await r.json().catch(()=>({}));tt=r.ok&&d?.data?.user?"TIKTOK_CONNECTED":"TIKTOK_AUTH_ERROR";}}catch{tt="TIKTOK_AUTH_ERROR"}
+  try{const token=await tiktokAccessToken();const openId=getSecret("tiktok","open_id");const exp=Number(getSecret("tiktok","expires_at")||0);tt=token&&openId&&(!exp||Date.now()<exp)?"TIKTOK_CONNECTED":"TIKTOK_AUTH_ERROR";}catch{tt="TIKTOK_AUTH_ERROR"}
   if(hasSecret("meta","access_token"))meta="CONFIGURED";
   if(hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"))wa="CONFIGURED";
   if(hasSecret("elevenlabs","api_key"))el="CONFIGURED";
