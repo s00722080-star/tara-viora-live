@@ -683,7 +683,7 @@ app.post("/api/actions/tiktok",async(req,res)=>{
 
 function graphVersion(){return getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0"}
 async function graphPost(pathName,token,payload){
-  const r=await fetch(`https://graph.facebook.com/${graphVersion}/${pathName}`,{
+  const r=await fetch(`https://graph.facebook.com/${graphVersion()}/${pathName}`,{
     method:"POST",headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
     body:JSON.stringify(payload)
   });
@@ -702,7 +702,7 @@ async function instagramPublish(payload){
   if(p.media_type==="REELS"){
     for(let i=0;i<12;i++){
       await new Promise(r=>setTimeout(r,2500));
-      const sr=await fetch(`https://graph.facebook.com/${graphVersion}/${created.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
+      const sr=await fetch(`https://graph.facebook.com/${graphVersion()}/${created.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
       const sd=await sr.json().catch(()=>({}));
       if(sd.status_code==="FINISHED")break;
       if(sd.status_code==="ERROR")throw new Error("instagram_media_processing_failed");
