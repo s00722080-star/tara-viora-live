@@ -70,6 +70,39 @@ function brandContext(){
   return all("SELECT kind,title,content FROM brand_knowledge WHERE active=1 ORDER BY id").map(x=>`[${x.kind}] ${x.title}: ${x.content}`).join("\n");
 }
 function safeJson(v){try{return JSON.parse(v)}catch{return {raw:v}}}
+const encSecret=String(process.env.APP_ENCRYPTION_KEY||"");
+function vaultKey(){if(!encSecret)throw new Error("encryption_key_missing");return crypto.createHash("sha256").update(encSecret).digest();}
+function encryptValue(value){
+  const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv("aes-256-gcm",vaultKey(),iv);
+  const enc=Buffer.concat([cipher.update(String(value),"utf8"),cipher.final()]),tag=cipher.getAuthTag();
+  return Buffer.concat([iv,tag,enc]).toString("base64");
+}
+function decryptValue(blob){
+  const b=Buffer.from(String(blob||""),"base64"),iv=b.subarray(0,12),tag=b.subarray(12,28),enc=b.subarray(28);
+  const decipher=crypto.createDecipheriv("aes-256-gcm",vaultKey(),iv);decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(enc),decipher.final()]).toString("utf8");
+}
+function putSecret(provider,key,value){
+  run("INSERT INTO integration_secrets(provider,key,value_enc,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(provider,key) DO UPDATE SET value_enc=excluded.value_enc,updated_at=CURRENT_TIMESTAMP",provider,key,encryptValue(value));
+}
+function getSecret(provider,key){
+  const r=one("SELECT value_enc FROM integration_secrets WHERE provider=? AND key=?",provider,key);
+  if(!r)return null;try{return decryptValue(r.value_enc)}catch{return null}
+}
+function hasSecret(provider,key){return Boolean(one("SELECT 1 v FROM integration_secrets WHERE provider=? AND key=?",provider,key))}
+function publicBaseUrl(){return "https://"+String(process.env.RAILWAY_PUBLIC_DOMAIN||"tara-viora-live-production.up.railway.app").replace(/^https?:\/\//,"").replace(/\/$/,"")}
+async function tiktokAccessToken(){
+  const access=getSecret("tiktok","access_token"),exp=Number(getSecret("tiktok","expires_at")||0);
+  if(access && Date.now()<exp-120000)return access;
+  const refresh=getSecret("tiktok","refresh_token"),clientKey=getSecret("tiktok","client_key"),clientSecret=getSecret("tiktok","client_secret");
+  if(!refresh||!clientKey||!clientSecret)return null;
+  const body=new URLSearchParams({client_key:clientKey,client_secret:clientSecret,grant_type:"refresh_token",refresh_token:refresh});
+  const r=await fetch("https://open.tiktokapis.com/v2/oauth/token/",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+  const d=await r.json().catch(()=>({}));if(!r.ok||!d.access_token)throw new Error("tiktok_refresh_failed");
+  putSecret("tiktok","access_token",d.access_token);if(d.refresh_token)putSecret("tiktok","refresh_token",d.refresh_token);
+  putSecret("tiktok","expires_at",String(Date.now()+Number(d.expires_in||86400)*1000));if(d.open_id)putSecret("tiktok","open_id",d.open_id);
+  return d.access_token;
+}
 async function postN8n(pathName,body){
   if(!n8nBase) throw new Error("n8n_not_connected");
   const r=await fetch(`${n8nBase}/webhook/${pathName}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -169,10 +202,74 @@ app.post("/webhooks/meta",(req,res)=>{
   res.sendStatus(200);
 });
 
+// TikTok OAuth callback (public, state-protected)
+app.get("/oauth/tiktok/callback",async(req,res)=>{
+  const cookies=parseCookies(req),state=String(req.query.state||""),expected=String(cookies.tv_tiktok_state||"");
+  if(!state||!expected||state!==expected)return res.status(403).send("TikTok OAuth state mismatch");
+  const code=String(req.query.code||"");if(!code)return res.status(400).send("TikTok authorization was not completed.");
+  const clientKey=getSecret("tiktok","client_key"),clientSecret=getSecret("tiktok","client_secret");
+  if(!clientKey||!clientSecret)return res.status(503).send("TikTok developer credentials are not configured.");
+  try{
+    const redirectUri=publicBaseUrl()+"/oauth/tiktok/callback";
+    const body=new URLSearchParams({client_key:clientKey,client_secret:clientSecret,code,grant_type:"authorization_code",redirect_uri:redirectUri});
+    const r=await fetch("https://open.tiktokapis.com/v2/oauth/token/",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.access_token)throw new Error(d.error_description||d.error||"token_exchange_failed");
+    putSecret("tiktok","access_token",d.access_token);if(d.refresh_token)putSecret("tiktok","refresh_token",d.refresh_token);
+    if(d.open_id)putSecret("tiktok","open_id",d.open_id);if(d.scope)putSecret("tiktok","scope",d.scope);
+    putSecret("tiktok","expires_at",String(Date.now()+Number(d.expires_in||86400)*1000));
+    res.setHeader("Set-Cookie","tv_tiktok_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+    return res.redirect("/?integration=tiktok-connected");
+  }catch(e){return res.status(502).send("TikTok connection failed: "+String(e.message||e));}
+});
+
 // Everything below is private
 app.use("/api", (req,res,next)=>{
   if(["/auth/status","/auth/setup","/auth/login","/status"].includes(req.path)) return next();
   return requireAuth(req,res,next);
+});
+
+app.post("/api/integrations/credentials",(req,res)=>{
+  const provider=String(req.body?.provider||"").toLowerCase(),fields=req.body?.fields||{};
+  const allowed={
+    tiktok:["client_key","client_secret"],
+    meta:["app_id","app_secret","access_token","page_id","ig_user_id","graph_version"],
+    whatsapp:["access_token","phone_number_id","verify_token","app_secret"],
+    elevenlabs:["api_key"]
+  };
+  if(!allowed[provider])return res.status(400).json({ok:false,error:"provider_not_supported"});
+  let saved=0;for(const k of allowed[provider]){const v=fields[k];if(typeof v==="string"&&v.trim()){putSecret(provider,k,v.trim());saved++;}}
+  audit("integration_credentials_updated",{userId:req.user.id,entityType:"integration",entityId:provider,metadata:{saved,keys:Object.keys(fields).filter(k=>allowed[provider].includes(k))}});
+  res.json({ok:true,provider,saved});
+});
+app.get("/api/integrations/tiktok/connect",(req,res)=>{
+  const clientKey=getSecret("tiktok","client_key");if(!clientKey)return res.status(409).json({ok:false,error:"tiktok_developer_credentials_required"});
+  const state=crypto.randomBytes(24).toString("hex"),redirectUri=publicBaseUrl()+"/oauth/tiktok/callback";
+  res.setHeader("Set-Cookie",`tv_tiktok_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
+  const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic,video.publish",redirect_uri:redirectUri,state});
+  res.json({ok:true,authorizeUrl:"https://www.tiktok.com/v2/auth/authorize/?"+q.toString(),redirectUri});
+});
+app.get("/api/integrations/tiktok/check",async(req,res)=>{
+  try{
+    const token=await tiktokAccessToken();if(!token)return res.json({ok:false,provider:"TIKTOK_NOT_CONNECTED"});
+    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
+    const d=await r.json().catch(()=>({}));const ok=Boolean(r.ok&&d?.error?.code==="ok");
+    res.status(ok?200:502).json({ok,provider:ok?"TIKTOK_READY":"TIKTOK_AUTH_ERROR",creator:d?.data||null,error:d?.error||null});
+  }catch(e){res.status(502).json({ok:false,provider:"TIKTOK_AUTH_ERROR",error:String(e.message||e)})}
+});
+app.post("/api/integrations/elevenlabs/check",async(req,res)=>{
+  const key=getSecret("elevenlabs","api_key");if(!key)return res.status(409).json({ok:false,provider:"NOT_CONNECTED"});
+  try{const r=await fetch("https://api.elevenlabs.io/v1/models",{headers:{"xi-api-key":key}});res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"ELEVENLABS_READY":"ELEVENLABS_AUTH_ERROR"});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
+});
+app.post("/api/integrations/meta/check",async(req,res)=>{
+  const token=getSecret("meta","access_token");if(!token)return res.status(409).json({ok:false,provider:"NOT_CONNECTED"});
+  const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
+  try{const r=await fetch(`https://graph.facebook.com/${version}/me?fields=id,name&access_token=${encodeURIComponent(token)}`);const d=await r.json().catch(()=>({}));res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"META_READY":"META_AUTH_ERROR",account:r.ok?{id:d.id,name:d.name}:null});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
+});
+app.post("/api/integrations/whatsapp/check",async(req,res)=>{
+  const token=getSecret("whatsapp","access_token"),phoneId=getSecret("whatsapp","phone_number_id");if(!token||!phoneId)return res.status(409).json({ok:false,provider:"NOT_CONNECTED"});
+  const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
+  try{const r=await fetch(`https://graph.facebook.com/${version}/${encodeURIComponent(phoneId)}?fields=id,display_phone_number,verified_name&access_token=${encodeURIComponent(token)}`);const d=await r.json().catch(()=>({}));res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"WHATSAPP_READY":"WHATSAPP_AUTH_ERROR",phone:r.ok?d:null});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
 });
 
 app.get("/api/dashboard",(req,res)=>{
