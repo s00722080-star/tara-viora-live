@@ -84,7 +84,7 @@ app.get("/api/integrations", async (_req, res) => {
   let higgsfieldProvider = "NOT_CONNECTED";
   if (n8nBase) {
     try {
-      const hr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+      const hr = await fetch(`${n8nBase}/webhook/tara-viora-higgsfield-check`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
@@ -136,7 +136,7 @@ app.get("/api/status", (_req, res) => res.json({
 app.get("/api/higgsfield-check", async (_req, res) => {
   if (!n8nBase) return res.status(503).json({ok:false, provider:"NOT_CONNECTED", reason:"n8n_not_connected"});
   try {
-    const nr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+    const nr = await fetch(`${n8nBase}/webhook/tara-viora-higgsfield-check`, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -268,7 +268,7 @@ app.listen(port, "0.0.0.0", () => {
         const body = await r.text();
         console.log("TARA_VIORA_STARTUP_SELFTEST", r.status, body.slice(0,1000));
         try {
-          const hr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+          const hr = await fetch(`${n8nBase}/webhook/tara-viora-higgsfield-check`, {
             method:"POST",
             headers:{"Content-Type":"application/json"},
             body:JSON.stringify({
