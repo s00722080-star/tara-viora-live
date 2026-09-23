@@ -29,7 +29,7 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
   <div class="brand">TARA VIORA</div><div class="tag">AI AGENCY OS</div>
   <div class="nav" id="nav">
     <button class="active" data-v="home">القيادة</button><button data-v="jobs">المهام</button><button data-v="approvals">الموافقات</button><button data-v="media">الوسائط</button>
-    <button data-v="content">المحتوى</button><button data-v="analytics">Analytics</button><button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="maintenance">الصيانة الذاتية</button><button data-v="audit">السجل</button>
+    <button data-v="content">المحتوى</button><button data-v="analytics">Analytics</button><button data-v="growth">النمو الذكي</button><button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="maintenance">الصيانة الذاتية</button><button data-v="audit">السجل</button>
   </div>
   <button id="logoutBtn" class="btn alt" style="width:100%;margin-top:20px">تسجيل خروج</button>
 </aside>
@@ -56,7 +56,7 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
     <div class="card"><div class="muted small">Spend</div><div class="num">$<span id="stSpend">0</span></div></div>
   </div>
 
-  <div class="toolbar section"><h2>الوحدات الـ 17</h2><span class="muted small">كل وحدة مرتبطة بالـDirector والـJobs والـApproval Gate</span></div>
+  <div class="toolbar section"><h2>الوحدات الأساسية + طبقة النمو الذكي</h2><span class="muted small">كل وحدة مرتبطة بالـDirector والـJobs والـApproval Gate</span></div>
   <div class="grid modules" id="modules"></div>
 </section>
 
@@ -166,6 +166,54 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
   </div>
 </section>
 
+<section id="growth" class="hide section">
+  <div class="panel">
+    <div class="toolbar">
+      <div><h2>Growth Intelligence Center</h2><div class="muted small">يربط الأداء، العملاء، المحتوى، الإعلان والميزانية في دائرة تعلّم واحدة. لا زيادة صرف أو إطلاق حملة بدون موافقة.</div></div>
+      <div class="row"><button class="btn alt" onclick="loadGrowth()">تحديث</button><button class="btn" onclick="analyzeGrowth()">تحليل الأنماط الناجحة</button></div>
+    </div>
+    <div class="grid stats">
+      <div class="card"><div class="muted small">Customer Events</div><div class="num" id="gxEvents">0</div></div>
+      <div class="card"><div class="muted small">أشخاص مميزون</div><div class="num" id="gxPeople">0</div></div>
+      <div class="card"><div class="muted small">Winning Patterns</div><div class="num" id="gxPatterns">0</div></div>
+      <div class="card"><div class="muted small">Budget Actions</div><div class="num" id="gxBudget">0</div></div>
+      <div class="card"><div class="muted small">Alerts</div><div class="num" id="gxAlerts">0</div></div>
+    </div>
+  </div>
+
+  <div class="grid cols section">
+    <div class="panel">
+      <div class="toolbar"><div><h3>Meta Growth Watcher</h3><div class="muted small">يتابع التغييرات الرسمية المؤثرة على Reels والتوصيات والمحتوى الأصلي والإعلانات.</div></div><button class="btn alt" onclick="runMetaWatcher()">فحص تحديثات Meta</button></div>
+      <div id="metaWatcherOut" class="list"></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Early Warning Bot</h3><div class="muted small">يحذّر قبل توقف النشر أو تراكم الموافقات أو نقص مخزون المحتوى.</div></div></div>
+      <div id="growthAlerts" class="list"></div>
+    </div>
+  </div>
+
+  <div class="grid cols section">
+    <div class="panel">
+      <div class="toolbar"><div><h3>Winning Patterns Library</h3><div class="muted small">يتعلم من نتائج TARA VIORA الفعلية، لا من قواعد فيرال ثابتة.</div></div></div>
+      <div id="winningPatterns" class="list"></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Smart Budget Allocator</h3><div class="muted small">يقترح HOLD / REDUCE / INCREASE بشكل محافظ، والتنفيذ الفعلي يمر عبر Approval Gate.</div></div><button class="btn alt" onclick="runBudgetOptimizer()">تحليل الميزانية</button></div>
+      <div id="budgetRecs" class="list"></div>
+    </div>
+  </div>
+
+  <div class="panel section">
+    <div class="toolbar"><div><h3>Customer & Viewer Data Intelligence</h3><div class="muted small">يجمع Events من المصادر المصرح بها ويخزن معرفات العملاء كـHash بدل حفظ المعرّف الخام في هذه الطبقة.</div></div></div>
+    <div id="customerDataSummary" class="list"></div>
+  </div>
+
+  <div class="panel section">
+    <h3>مسار التعلم المستمر</h3>
+    <div class="item">Customer Data → Performance Signals → Winning Patterns → Content Optimizer → Smart Ads → Budget Optimizer → Attribution → Learning</div>
+  </div>
+</section>
+
 <section id="maintenance" class="hide section">
   <div class="panel">
     <div class="toolbar">
@@ -226,7 +274,7 @@ async function boot(){const s=await fetch("/api/auth/status").then(r=>r.json());
 authBtn.onclick=async()=>{authMsg.textContent="";try{await api(authMode==="setup"?"/api/auth/setup":"/api/auth/login",{method:"POST",body:JSON.stringify({username:authUser.value.trim(),password:authPass.value})});authScreen.classList.add("hide");await refreshAll()}catch(e){authMsg.textContent=e.message==="password_min_10"?"كلمة المرور لازم تكون 10 أحرف على الأقل.":"تعذر الدخول/الإعداد."}}
 logoutBtn.onclick=async()=>{try{await api("/api/auth/logout",{method:"POST",body:"{}"})}catch{}showAuth("login")}
 
-document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="maintenance")loadMaintenance();if(b.dataset.v==="audit")loadAudit();});
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="growth")loadGrowth();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="maintenance")loadMaintenance();if(b.dataset.v==="audit")loadAudit();});
 function renderModules(){modules.innerHTML=MODULES.map((m,i)=>'<div class="card module" onclick="moduleInfo('+i+')"><div class="muted small">MODULE '+String(i+1).padStart(2,"0")+'</div><h3>'+m[0]+'</h3><div class="muted small">'+m[1]+'</div></div>').join("")}
 function moduleInfo(i){modalBody.innerHTML='<div class="muted small">MODULE '+(i+1)+'</div><h2 class="gold">'+MODULES[i][0]+'</h2><p>'+MODULES[i][1]+'</p><button class="btn" onclick="command.value=\'نفّذ مهمة ضمن وحدة '+MODULES[i][0]+'\';closeModal()">إرسال للمدير التنفيذي</button>';modal.classList.remove("hide")}
 function closeModal(){modal.classList.add("hide")}
@@ -262,6 +310,27 @@ async function loadContent(){const d=await api("/api/content");contentList.inner
 async function schedulePost(){const scheduledAt=schedAt.value?new Date(schedAt.value).toISOString():"";const platform=schedPlatform.value;const media=schedMediaUrl.value.trim();const payload={title:schedTitle.value||("Scheduled "+platform),platform,scheduledAt,caption:schedCaption.value,message:schedCaption.value};if(platform==="instagram"){if(media&&/\.mp4|video/i.test(media))payload.videoUrl=media;else if(media)payload.imageUrl=media}else if(platform==="tiktok"){payload.videoUrl=media;payload.title=schedCaption.value;payload.creatorConfirmed=true}else if(platform==="facebook"){payload.imageUrl=media}else if(platform==="whatsapp"){payload.to=prompt("رقم WhatsApp بصيغة دولية")||""}try{const d=await api("/api/schedule",{method:"POST",body:JSON.stringify(payload)});alert("تم إنشاء Job #"+d.jobId+" وبانتظار الموافقة.");await Promise.all([loadApprovals(),loadJobs(),refreshDashboard()])}catch(e){alert("تعذر الجدولة: "+e.message)}}
 async function loadAnalytics(){const [a,b,v]=await Promise.all([api("/api/analytics/summary"),api("/api/analytics/best-time"),api("/api/voc")]);analyticsSummary.innerHTML=a.byMetric.length?a.byMetric.map(x=>'<div class="item"><b>'+esc(x.platform)+' • '+esc(x.metric)+'</b><div class="num">'+x.total+'</div><div class="muted small">'+x.samples+' samples</div></div>').join(""):'<div class="muted">لا بيانات أداء بعد. ستظهر بعد ربط المنصات أو إدخال القياسات.</div>';bestTimeList.innerHTML=b.items.length?b.items.map(x=>'<div class="item"><b>'+esc(x.platform)+'</b><div>اليوم '+x.weekday+' • الساعة '+x.hour+':00</div><div class="muted small">Score '+x.score+' • '+x.samples+' samples</div></div>').join(""):'<div class="muted">نحتاج بيانات منشورة وتفاعل قبل حساب أفضل وقت.</div>';vocList.innerHTML=v.items.length?v.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.category||"other")+'</b><span class="status '+(x.sentiment==="negative"?"bad":x.sentiment==="positive"?"ok":"wait")+'">'+esc(x.sentiment||"neutral")+'</span></div><div>'+esc(x.text)+'</div><div class="muted small">'+esc(x.content_idea||"")+'</div></div>').join(""):'<div class="muted">لا VOC بعد.</div>'}
 async function addVoc(){const text=vocText.value.trim();if(!text)return;await api("/api/voc/ingest",{method:"POST",body:JSON.stringify({text,platform:vocPlatform.value})});vocText.value="";await loadAnalytics()}
+async function loadGrowth(){
+  try{
+    const [x,p,b,c,m,a]=await Promise.all([
+      api("/api/growth/executive"),api("/api/growth/winning-patterns"),api("/api/budget/recommendations"),
+      api("/api/customer-data/summary"),api("/api/meta-watcher/status"),api("/api/alerts")
+    ]);
+    gxEvents.textContent=x.customer?.events||0;gxPeople.textContent=x.customer?.people||0;
+    gxPatterns.textContent=(p.items||[]).length;gxBudget.textContent=(b.items||[]).filter(r=>["proposed","waiting_approval"].includes(r.status)).length;
+    gxAlerts.textContent=(a.alerts||[]).length;
+    winningPatterns.innerHTML=(p.items||[]).length?(p.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.platform)+' • '+esc(r.pattern_type)+' • '+esc(r.pattern_key)+'</b><span class="status '+(r.status==="validated"?"ok":"wait")+'">'+esc(r.status)+'</span></div><div class="muted small">Score '+Number(r.score||0).toFixed(2)+' • Evidence '+r.evidence_count+'</div></div>').join(""):'<div class="muted">ما زلنا نحتاج بيانات أداء كافية لبناء أنماط رابحة.</div>';
+    budgetRecs.innerHTML=(b.items||[]).length?(b.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.campaign_name||("Campaign #"+r.campaign_id))+'</b><span class="status '+(r.action==="INCREASE"?"ok":r.action==="REDUCE"?"bad":"wait")+'">'+esc(r.action)+'</span></div><div>'+Number(r.current_budget||0).toFixed(2)+' → '+Number(r.suggested_budget||0).toFixed(2)+'</div><div class="muted small">'+esc(r.reason||"")+' • Confidence '+Math.round(Number(r.confidence||0)*100)+'%</div>'+(r.status==="proposed"?'<button class="btn alt" style="margin-top:8px" onclick="prepareBudgetRec('+r.id+')">إرسال للموافقة</button>':'<div class="muted small">الحالة: '+esc(r.status)+'</div>')+'</div>').join(""):'<div class="muted">لا توصيات ميزانية بعد.</div>';
+    customerDataSummary.innerHTML=(c.byEvent||[]).length?(c.byEvent||[]).map(r=>'<div class="item"><b>'+esc(r.source)+' • '+esc(r.event_type)+'</b><div class="muted small">Events '+r.count+' • Value '+Number(r.total_value||0).toFixed(2)+'</div></div>').join(""):'<div class="muted">لا Customer Events بعد. ستبدأ بالامتلاء بعد ربط Meta/WhatsApp/الموقع والحملات.</div>';
+    growthAlerts.innerHTML=(a.alerts||[]).length?(a.alerts||[]).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.title)+'</b><span class="status '+(r.severity==="critical"?"bad":"wait")+'">'+esc(r.severity)+'</span></div><div class="muted small">'+esc(r.details||"")+'</div></div>').join(""):'<div class="muted">لا إنذارات مبكرة حاليًا.</div>';
+    const mu=m.items||[];metaWatcherOut.innerHTML=(m.summary?'<div class="item" style="white-space:pre-wrap">'+esc(m.summary)+'</div>':"")+(mu.length?mu.slice(0,5).map(r=>'<div class="item"><b>'+esc(r.title)+'</b><div class="muted small">'+esc(r.created_at||"")+'</div></div>').join(""):'<div class="muted">لم يتم تشغيل Meta Watcher بعد.</div>');
+  }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+}
+async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
+async function runBudgetOptimizer(){try{const d=await api("/api/budget/optimizer/run",{method:"POST",body:"{}"});alert("تم إنشاء "+d.created+" توصية جديدة بدون تنفيذ أي صرف.");await loadGrowth()}catch(e){alert("تعذر تحليل الميزانية: "+e.message)}}
+async function prepareBudgetRec(id){try{const d=await api("/api/budget/recommendations/"+id+"/prepare",{method:"POST",body:"{}"});alert("تم إرسال التوصية للموافقة. Job #"+d.jobId);await Promise.all([loadGrowth(),loadApprovals(),refreshDashboard()])}catch(e){alert("تعذر إرسال التوصية: "+e.message)}}
+async function runMetaWatcher(){metaWatcherOut.innerHTML='<div class="item">جاري البحث في مصادر Meta الرسمية...</div>';try{const d=await api("/api/meta-watcher/run",{method:"POST",body:"{}"});await loadGrowth()}catch(e){metaWatcherOut.innerHTML='<div class="item bad">تعذر الفحص: '+esc(e.message)+'</div>'}}
+
 
 async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
 async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
