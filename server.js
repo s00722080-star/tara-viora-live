@@ -612,23 +612,24 @@ setInterval(()=>{try{createBackupFile();audit("automatic_backup_created",{entity
 
 // Integrations live status
 app.get("/api/integrations",async(req,res)=>{
-  let hf="NOT_CONNECTED",tt="NOT_CONNECTED";
-  if(n8nBase){
-    try{const r=await postN8n("tara-viora-higgsfield-check",{source:"integration-status"});hf=r.data?.provider||"NOT_CONNECTED";}catch{}
-    try{const r=await postN8n("tara-viora-tiktok-check",{source:"integration-status"});tt=r.data?.provider||"NOT_CONNECTED";}catch{}
-  }
+  let hf="NOT_CONNECTED",tt="NOT_CONNECTED",meta="NOT_CONNECTED",wa="NOT_CONNECTED",el="NOT_CONNECTED";
+  if(n8nBase){try{const r=await postN8n("tara-viora-higgsfield-check",{source:"integration-status"});hf=r.data?.provider||"NOT_CONNECTED";}catch{}}
+  try{const token=await tiktokAccessToken();if(token){const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});const d=await r.json().catch(()=>({}));tt=r.ok&&d?.error?.code==="ok"?"TIKTOK_READY":"TIKTOK_AUTH_ERROR";}}catch{tt="TIKTOK_AUTH_ERROR"}
+  if(hasSecret("meta","access_token"))meta="CONFIGURED";
+  if(hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"))wa="CONFIGURED";
+  if(hasSecret("elevenlabs","api_key"))el="CONFIGURED";
   const providers={
     openai:{label:"OpenAI Executive",connected:Boolean(client),status:client?"CONFIGURED":"NOT_CONNECTED"},
     n8n:{label:"n8n Automation",connected:Boolean(n8nBase),status:n8nBase?"CONNECTED":"NOT_CONNECTED"},
     higgsfield:{label:"Higgsfield Video",connected:hf==="HIGGSFIELD_READY",status:hf},
-    tiktok:{label:"TikTok",connected:tt==="TIKTOK_READY",status:tt},
-    meta:{label:"Instagram + Facebook",connected:Boolean(process.env.META_ACCESS_TOKEN&&process.env.META_PAGE_ID),status:process.env.META_ACCESS_TOKEN?"CONFIGURED":"NOT_CONNECTED"},
-    whatsapp:{label:"WhatsApp Business",connected:Boolean(process.env.WHATSAPP_ACCESS_TOKEN&&process.env.WHATSAPP_PHONE_NUMBER_ID),status:process.env.WHATSAPP_ACCESS_TOKEN?"CONFIGURED":"NOT_CONNECTED"},
-    elevenlabs:{label:"ElevenLabs Voice",connected:Boolean(process.env.ELEVENLABS_API_KEY),status:process.env.ELEVENLABS_API_KEY?"CONFIGURED":"NOT_CONNECTED"},
-    cloudinary:{label:"Cloudinary",connected:Boolean(process.env.CLOUDINARY_URL),status:process.env.CLOUDINARY_URL?"CONFIGURED":"OPTIONAL_NOT_CONNECTED"},
-    storage:{label:"Persistent Media Storage",connected:true,status:"LOCAL_VOLUME_READY"}
+    tiktok:{label:"TikTok",connected:tt==="TIKTOK_READY",status:tt,needsDeveloperCredentials:!hasSecret("tiktok","client_key")||!hasSecret("tiktok","client_secret")},
+    meta:{label:"Instagram + Facebook",connected:meta==="CONFIGURED",status:meta},
+    whatsapp:{label:"WhatsApp Business",connected:wa==="CONFIGURED",status:wa},
+    elevenlabs:{label:"ElevenLabs Voice",connected:el==="CONFIGURED",status:el},
+    storage:{label:"Persistent Media Storage",connected:true,status:"LOCAL_VOLUME_READY"},
+    postgres:{label:"PostgreSQL",connected:dbMode==="POSTGRES",status:dbMode}
   };
-  res.json({ok:true,providers});
+  res.json({ok:true,providers,redirects:{tiktok:publicBaseUrl()+"/oauth/tiktok/callback",metaWebhook:publicBaseUrl()+"/webhooks/meta"}});
 });
 
 app.get("/api/audit",(req,res)=>res.json({ok:true,items:all("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").map(x=>({...x,metadata:json(x.metadata_json)}))}));
@@ -662,11 +663,25 @@ app.post("/api/actions/higgsfield",async(req,res)=>{
 app.post("/api/actions/tiktok",async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   if(!req.body?.creatorConfirmed)return res.status(400).json({ok:false,error:"creator_confirmation_required"});
-  try{const r=await postN8n("tara-viora-tiktok-publish",{...req.body,approved:true,creatorConfirmed:true});run("UPDATE jobs SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",r.ok?"submitted":"failed",JSON.stringify(r.data),job.id);audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id});res.status(r.ok?200:502).json({ok:r.ok,result:r.data});}catch(e){res.status(502).json({ok:false,error:String(e.message)});}
+  try{
+    const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
+    const creator=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
+    const cd=await creator.json().catch(()=>({}));if(!creator.ok||cd?.error?.code!=="ok")throw new Error("tiktok_creator_info_failed");
+    const privacy=String(req.body?.privacy_level||"SELF_ONLY");
+    const allowed=cd?.data?.privacy_level_options||[];
+    if(allowed.length&&!allowed.includes(privacy))return res.status(400).json({ok:false,error:"privacy_level_not_allowed",allowed});
+    const payload={post_info:{title:String(req.body?.title||"").slice(0,2200),privacy_level:privacy,brand_organic_toggle:req.body?.brand_organic_toggle!==false,is_aigc:Boolean(req.body?.is_aigc)},source_info:{source:"PULL_FROM_URL",video_url:String(req.body?.videoUrl||"")}};
+    if(!payload.source_info.video_url)return res.status(400).json({ok:false,error:"video_url_required"});
+    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:JSON.stringify(payload)});
+    const d=await r.json().catch(()=>({}));if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_publish_init_failed");
+    run("UPDATE jobs SET status='submitted',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(d),job.id);
+    audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId:d?.data?.publish_id||null}});
+    res.json({ok:true,result:d});
+  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
 });
 
 
-const graphVersion=process.env.META_GRAPH_VERSION||"v24.0";
+function graphVersion(){return getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0"}
 async function graphPost(pathName,token,payload){
   const r=await fetch(`https://graph.facebook.com/${graphVersion}/${pathName}`,{
     method:"POST",headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
@@ -677,7 +692,7 @@ async function graphPost(pathName,token,payload){
   return data;
 }
 async function instagramPublish(payload){
-  const token=process.env.META_ACCESS_TOKEN, ig=process.env.META_IG_USER_ID;
+  const token=getSecret("meta","access_token")||process.env.META_ACCESS_TOKEN, ig=getSecret("meta","ig_user_id")||process.env.META_IG_USER_ID;
   if(!token||!ig)throw new Error("meta_not_connected");
   const p={caption:String(payload.caption||"")};
   if(payload.mediaType==="REELS"||payload.videoUrl){p.media_type="REELS";p.video_url=payload.videoUrl;}
@@ -696,13 +711,13 @@ async function instagramPublish(payload){
   return graphPost(`${ig}/media_publish`,token,{creation_id:created.id});
 }
 async function facebookPublish(payload){
-  const token=process.env.META_ACCESS_TOKEN,page=process.env.META_PAGE_ID;
+  const token=getSecret("meta","access_token")||process.env.META_ACCESS_TOKEN,page=getSecret("meta","page_id")||process.env.META_PAGE_ID;
   if(!token||!page)throw new Error("meta_not_connected");
   if(payload.imageUrl)return graphPost(`${page}/photos`,token,{url:payload.imageUrl,message:String(payload.message||payload.caption||"")});
   return graphPost(`${page}/feed`,token,{message:String(payload.message||payload.caption||"")});
 }
 async function whatsappSend(payload){
-  const token=process.env.WHATSAPP_ACCESS_TOKEN,phoneId=process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token=getSecret("whatsapp","access_token")||process.env.WHATSAPP_ACCESS_TOKEN,phoneId=getSecret("whatsapp","phone_number_id")||process.env.WHATSAPP_PHONE_NUMBER_ID;
   if(!token||!phoneId)throw new Error("whatsapp_not_connected");
   const body=payload.templateName?{
     messaging_product:"whatsapp",to:String(payload.to),type:"template",
@@ -723,7 +738,7 @@ app.post("/api/voiceover/prepare",(req,res)=>{
 });
 app.post("/api/actions/elevenlabs",async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
-  const key=process.env.ELEVENLABS_API_KEY;if(!key)return res.status(503).json({ok:false,error:"elevenlabs_not_connected"});
+  const key=getSecret("elevenlabs","api_key")||process.env.ELEVENLABS_API_KEY;if(!key)return res.status(503).json({ok:false,error:"elevenlabs_not_connected"});
   const p=json(job.payload_json),voiceId=String(req.body?.voiceId||p.voiceId||""),text=String(req.body?.text||p.text||"");
   try{
     const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,{
