@@ -157,7 +157,7 @@ app.get("/health/ready",(_req,res)=>{
   try{const p=path.join(DATA_DIR,".ready");fs.writeFileSync(p,"ok");volumeOk=fs.readFileSync(p,"utf8")==="ok";fs.unlinkSync(p)}catch{}
   try{ffmpegOk=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0}catch{}
   const ok=dbOk&&volumeOk&&ffmpegOk;
-  res.status(ok?200:503).json({ok,db:dbOk,volume:volumeOk,ffmpeg:ffmpegOk,mode:stagingMode?"STAGING":"PRODUCTION"});
+  res.status(ok?200:503).json({ok,db:dbOk,volume:volumeOk,ffmpeg:ffmpegOk,mode:stagingMode?"STAGING":"PRODUCTION",commit:process.env.RAILWAY_GIT_COMMIT_SHA||process.env.RAILWAY_GIT_COMMIT||"unknown"});
 });
 app.get("/health/deep",async(_req,res)=>{
   let dbOk=false,volumeOk=false,ffmpegOk=false,n8nOk=false,higgsfield="UNKNOWN";
