@@ -251,10 +251,28 @@ app.get("/api/integrations/tiktok/connect",(req,res)=>{
 });
 app.get("/api/integrations/tiktok/check",async(req,res)=>{
   try{
-    const token=await tiktokAccessToken();if(!token)return res.json({ok:false,provider:"TIKTOK_NOT_CONNECTED"});
-    const r=await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",{headers:{Authorization:`Bearer ${token}`}});
-    const d=await r.json().catch(()=>({}));const ok=Boolean(r.ok&&d?.data?.user);
-    res.status(ok?200:502).json({ok,provider:ok?"TIKTOK_CONNECTED":"TIKTOK_AUTH_ERROR",user:d?.data?.user||null,error:d?.error||null});
+    const token=await tiktokAccessToken();
+    if(!token)return res.json({ok:false,provider:"TIKTOK_NOT_CONNECTED"});
+    const openId=getSecret("tiktok","open_id");
+    const scope=getSecret("tiktok","scope")||"";
+    const expiresAt=Number(getSecret("tiktok","expires_at")||0);
+    try{
+      const r=await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",{headers:{Authorization:`Bearer ${token}`}});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok&&d?.data?.user){
+        return res.json({ok:true,provider:"TIKTOK_CONNECTED",user:d.data.user,scope,expiresAt,check:"live_api"});
+      }
+      // Sandbox/basic-login fallback: OAuth itself succeeded and a non-expired token is stored.
+      if(openId && (!expiresAt || Date.now()<expiresAt)){
+        return res.json({ok:true,provider:"TIKTOK_CONNECTED",user:{open_id:openId},scope,expiresAt,check:"oauth_token",warning:d?.error||null});
+      }
+      return res.status(502).json({ok:false,provider:"TIKTOK_AUTH_ERROR",error:d?.error||null});
+    }catch(inner){
+      if(openId && (!expiresAt || Date.now()<expiresAt)){
+        return res.json({ok:true,provider:"TIKTOK_CONNECTED",user:{open_id:openId},scope,expiresAt,check:"oauth_token",warning:String(inner.message||inner)});
+      }
+      throw inner;
+    }
   }catch(e){res.status(502).json({ok:false,provider:"TIKTOK_AUTH_ERROR",error:String(e.message||e)})}
 });
 app.post("/api/integrations/elevenlabs/check",async(req,res)=>{
