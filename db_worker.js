@@ -175,6 +175,77 @@ CREATE TABLE IF NOT EXISTS experiments (
   result_json TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS growth_signals (
+  id BIGSERIAL PRIMARY KEY,
+  platform TEXT NOT NULL,
+  content_id BIGINT,
+  campaign_id BIGINT,
+  signal_type TEXT NOT NULL,
+  value DOUBLE PRECISION NOT NULL DEFAULT 0,
+  dimension_json TEXT DEFAULT '{}',
+  measured_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS winning_patterns (
+  id BIGSERIAL PRIMARY KEY,
+  platform TEXT NOT NULL,
+  pattern_type TEXT NOT NULL,
+  pattern_key TEXT NOT NULL,
+  score DOUBLE PRECISION DEFAULT 0,
+  evidence_count INTEGER DEFAULT 0,
+  metrics_json TEXT DEFAULT '{}',
+  status TEXT DEFAULT 'learning',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(platform,pattern_type,pattern_key)
+);
+CREATE TABLE IF NOT EXISTS customer_events (
+  id BIGSERIAL PRIMARY KEY,
+  source TEXT NOT NULL,
+  customer_key_hash TEXT,
+  event_type TEXT NOT NULL,
+  content_id BIGINT,
+  campaign_id BIGINT,
+  value DOUBLE PRECISION DEFAULT 0,
+  consent_status TEXT DEFAULT 'unknown',
+  metadata_json TEXT DEFAULT '{}',
+  occurred_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS budget_recommendations (
+  id BIGSERIAL PRIMARY KEY,
+  campaign_id BIGINT,
+  platform TEXT,
+  action TEXT NOT NULL,
+  current_budget DOUBLE PRECISION DEFAULT 0,
+  suggested_budget DOUBLE PRECISION DEFAULT 0,
+  reason TEXT,
+  confidence DOUBLE PRECISION DEFAULT 0,
+  status TEXT DEFAULT 'proposed',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  decided_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS platform_updates (
+  id BIGSERIAL PRIMARY KEY,
+  platform TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  source_url TEXT,
+  published_at TIMESTAMPTZ,
+  impact TEXT DEFAULT 'review',
+  status TEXT DEFAULT 'new',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_updates_source_dedupe ON platform_updates(source_url);
+CREATE TABLE IF NOT EXISTS system_alerts (
+  id BIGSERIAL PRIMARY KEY,
+  severity TEXT NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  details TEXT,
+  status TEXT DEFAULT 'open',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ
+);
 CREATE TABLE IF NOT EXISTS integration_secrets (
   provider TEXT NOT NULL,
   key TEXT NOT NULL,

@@ -36,6 +36,77 @@ CREATE TABLE IF NOT EXISTS voc_items (id INTEGER PRIMARY KEY AUTOINCREMENT,platf
 CREATE UNIQUE INDEX IF NOT EXISTS voc_external_dedupe ON voc_items(platform,external_id);
 CREATE TABLE IF NOT EXISTS campaigns (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,platform TEXT,objective TEXT,audience_json TEXT DEFAULT '{}',budget REAL DEFAULT 0,status TEXT DEFAULT 'draft',external_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS experiments (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,hypothesis TEXT,variant_a TEXT,variant_b TEXT,metric TEXT,status TEXT DEFAULT 'planned',result_json TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+
+CREATE TABLE IF NOT EXISTS growth_signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL,
+  content_id INTEGER,
+  campaign_id INTEGER,
+  signal_type TEXT NOT NULL,
+  value REAL NOT NULL DEFAULT 0,
+  dimension_json TEXT DEFAULT '{}',
+  measured_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS winning_patterns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL,
+  pattern_type TEXT NOT NULL,
+  pattern_key TEXT NOT NULL,
+  score REAL DEFAULT 0,
+  evidence_count INTEGER DEFAULT 0,
+  metrics_json TEXT DEFAULT '{}',
+  status TEXT DEFAULT 'learning',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(platform,pattern_type,pattern_key)
+);
+CREATE TABLE IF NOT EXISTS customer_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL,
+  customer_key_hash TEXT,
+  event_type TEXT NOT NULL,
+  content_id INTEGER,
+  campaign_id INTEGER,
+  value REAL DEFAULT 0,
+  consent_status TEXT DEFAULT 'unknown',
+  metadata_json TEXT DEFAULT '{}',
+  occurred_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS budget_recommendations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER,
+  platform TEXT,
+  action TEXT NOT NULL,
+  current_budget REAL DEFAULT 0,
+  suggested_budget REAL DEFAULT 0,
+  reason TEXT,
+  confidence REAL DEFAULT 0,
+  status TEXT DEFAULT 'proposed',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS platform_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT,
+  source_url TEXT,
+  published_at TEXT,
+  impact TEXT DEFAULT 'review',
+  status TEXT DEFAULT 'new',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS platform_updates_source_dedupe ON platform_updates(source_url);
+CREATE TABLE IF NOT EXISTS system_alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  severity TEXT NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT NOT NULL,
+  details TEXT,
+  status TEXT DEFAULT 'open',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TEXT
+);
 CREATE TABLE IF NOT EXISTS integration_secrets (
   provider TEXT NOT NULL,
   key TEXT NOT NULL,
