@@ -175,6 +175,13 @@ CREATE TABLE IF NOT EXISTS experiments (
   result_json TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS integration_secrets (
+  provider TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value_enc TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY(provider,key)
+);
 `;
 await client.query(schema);
 
