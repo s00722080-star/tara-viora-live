@@ -375,7 +375,7 @@ app.get("/api/analytics/best-time",(req,res)=>{
     SELECT c.platform,
            cast(strftime('%w',coalesce(c.published_at,c.scheduled_at)) as integer) weekday,
            cast(strftime('%H',coalesce(c.published_at,c.scheduled_at)) as integer) hour,
-           round(avg(a.value),2) score,
+           round(avg(a.value)::numeric,2)::double precision score,
            count(*) samples
     FROM content_items c JOIN analytics a ON a.content_id=c.id
     WHERE a.metric IN ('engagement','engagement_rate','clicks','conversions')
