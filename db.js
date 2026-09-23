@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS voc_items (id INTEGER PRIMARY KEY AUTOINCREMENT,platf
 CREATE UNIQUE INDEX IF NOT EXISTS voc_external_dedupe ON voc_items(platform,external_id);
 CREATE TABLE IF NOT EXISTS campaigns (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,platform TEXT,objective TEXT,audience_json TEXT DEFAULT '{}',budget REAL DEFAULT 0,status TEXT DEFAULT 'draft',external_id TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS experiments (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,hypothesis TEXT,variant_a TEXT,variant_b TEXT,metric TEXT,status TEXT DEFAULT 'planned',result_json TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS integration_secrets (
+  provider TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value_enc TEXT NOT NULL,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(provider,key)
+);
 `);
 }
 
