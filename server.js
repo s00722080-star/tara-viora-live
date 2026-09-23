@@ -246,15 +246,15 @@ app.get("/api/integrations/tiktok/connect",(req,res)=>{
   const clientKey=getSecret("tiktok","client_key");if(!clientKey)return res.status(409).json({ok:false,error:"tiktok_developer_credentials_required"});
   const state=crypto.randomBytes(24).toString("hex"),redirectUri=publicBaseUrl()+"/oauth/tiktok/callback";
   res.setHeader("Set-Cookie",`tv_tiktok_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`);
-  const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic,video.publish",redirect_uri:redirectUri,state});
+  const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic,video.upload",redirect_uri:redirectUri,state});
   res.json({ok:true,authorizeUrl:"https://www.tiktok.com/v2/auth/authorize/?"+q.toString(),redirectUri});
 });
 app.get("/api/integrations/tiktok/check",async(req,res)=>{
   try{
     const token=await tiktokAccessToken();if(!token)return res.json({ok:false,provider:"TIKTOK_NOT_CONNECTED"});
-    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
-    const d=await r.json().catch(()=>({}));const ok=Boolean(r.ok&&d?.error?.code==="ok");
-    res.status(ok?200:502).json({ok,provider:ok?"TIKTOK_READY":"TIKTOK_AUTH_ERROR",creator:d?.data||null,error:d?.error||null});
+    const r=await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url",{headers:{Authorization:`Bearer ${token}`}});
+    const d=await r.json().catch(()=>({}));const ok=Boolean(r.ok&&d?.data?.user);
+    res.status(ok?200:502).json({ok,provider:ok?"TIKTOK_UPLOAD_READY":"TIKTOK_AUTH_ERROR",user:d?.data?.user||null,error:d?.error||null,mode:"manual_draft"});
   }catch(e){res.status(502).json({ok:false,provider:"TIKTOK_AUTH_ERROR",error:String(e.message||e)})}
 });
 app.post("/api/integrations/elevenlabs/check",async(req,res)=>{
@@ -614,7 +614,7 @@ setInterval(()=>{try{createBackupFile();audit("automatic_backup_created",{entity
 app.get("/api/integrations",async(req,res)=>{
   let hf="NOT_CONNECTED",tt="NOT_CONNECTED",meta="NOT_CONNECTED",wa="NOT_CONNECTED",el="NOT_CONNECTED";
   if(n8nBase){try{const r=await postN8n("tara-viora-higgsfield-check",{source:"integration-status"});hf=r.data?.provider||"NOT_CONNECTED";}catch{}}
-  try{const token=await tiktokAccessToken();if(token){const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});const d=await r.json().catch(()=>({}));tt=r.ok&&d?.error?.code==="ok"?"TIKTOK_READY":"TIKTOK_AUTH_ERROR";}}catch{tt="TIKTOK_AUTH_ERROR"}
+  try{const token=await tiktokAccessToken();if(token){const r=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});const d=await r.json().catch(()=>({}));tt=r.ok&&d?.data?.user?"TIKTOK_UPLOAD_READY":"TIKTOK_AUTH_ERROR";}}catch{tt="TIKTOK_AUTH_ERROR"}
   if(hasSecret("meta","access_token"))meta="CONFIGURED";
   if(hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"))wa="CONFIGURED";
   if(hasSecret("elevenlabs","api_key"))el="CONFIGURED";
@@ -622,7 +622,7 @@ app.get("/api/integrations",async(req,res)=>{
     openai:{label:"OpenAI Executive",connected:Boolean(client),status:client?"CONFIGURED":"NOT_CONNECTED"},
     n8n:{label:"n8n Automation",connected:Boolean(n8nBase),status:n8nBase?"CONNECTED":"NOT_CONNECTED"},
     higgsfield:{label:"Higgsfield Video",connected:hf==="HIGGSFIELD_READY",status:hf},
-    tiktok:{label:"TikTok",connected:tt==="TIKTOK_READY",status:tt,needsDeveloperCredentials:!hasSecret("tiktok","client_key")||!hasSecret("tiktok","client_secret")},
+    tiktok:{label:"TikTok",connected:tt==="TIKTOK_UPLOAD_READY",status:tt,mode:"MANUAL_DRAFT",needsDeveloperCredentials:!hasSecret("tiktok","client_key")||!hasSecret("tiktok","client_secret")},
     meta:{label:"Instagram + Facebook",connected:meta==="CONFIGURED",status:meta},
     whatsapp:{label:"WhatsApp Business",connected:wa==="CONFIGURED",status:wa},
     elevenlabs:{label:"ElevenLabs Voice",connected:el==="CONFIGURED",status:el},
@@ -662,21 +662,21 @@ app.post("/api/actions/higgsfield",async(req,res)=>{
 });
 app.post("/api/actions/tiktok",async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
-  if(!req.body?.creatorConfirmed)return res.status(400).json({ok:false,error:"creator_confirmation_required"});
   try{
     const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
-    const creator=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
-    const cd=await creator.json().catch(()=>({}));if(!creator.ok||cd?.error?.code!=="ok")throw new Error("tiktok_creator_info_failed");
-    const privacy=String(req.body?.privacy_level||"SELF_ONLY");
-    const allowed=cd?.data?.privacy_level_options||[];
-    if(allowed.length&&!allowed.includes(privacy))return res.status(400).json({ok:false,error:"privacy_level_not_allowed",allowed});
-    const payload={post_info:{title:String(req.body?.title||"").slice(0,2200),privacy_level:privacy,brand_organic_toggle:req.body?.brand_organic_toggle!==false,is_aigc:Boolean(req.body?.is_aigc)},source_info:{source:"PULL_FROM_URL",video_url:String(req.body?.videoUrl||"")}};
-    if(!payload.source_info.video_url)return res.status(400).json({ok:false,error:"video_url_required"});
-    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:JSON.stringify(payload)});
-    const d=await r.json().catch(()=>({}));if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_publish_init_failed");
+    const videoUrl=String(req.body?.videoUrl||"").trim();
+    if(!videoUrl)return res.status(400).json({ok:false,error:"video_url_required"});
+    const payload={source_info:{source:"PULL_FROM_URL",video_url:videoUrl}};
+    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",{
+      method:"POST",
+      headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_upload_init_failed");
     run("UPDATE jobs SET status='submitted',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(d),job.id);
-    audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId:d?.data?.publish_id||null}});
-    res.json({ok:true,result:d});
+    audit("tiktok_draft_uploaded",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId:d?.data?.publish_id||null,mode:"manual_draft"}});
+    res.json({ok:true,result:d,mode:"manual_draft",message:"تم إرسال الفيديو إلى TikTok كمسودة. افتحي إشعار TikTok وأكملي التعديل والنشر يدويًا."});
   }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
 });
 
