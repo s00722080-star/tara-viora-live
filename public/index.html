@@ -29,7 +29,7 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
   <div class="brand">TARA VIORA</div><div class="tag">AI AGENCY OS</div>
   <div class="nav" id="nav">
     <button class="active" data-v="home">القيادة</button><button data-v="jobs">المهام</button><button data-v="approvals">الموافقات</button><button data-v="media">الوسائط</button>
-    <button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="audit">السجل</button>
+    <button data-v="content">المحتوى</button><button data-v="analytics">Analytics</button><button data-v="crm">B2B CRM</button><button data-v="brand">Brand Brain</button><button data-v="integrations">الربط</button><button data-v="audit">السجل</button>
   </div>
   <button id="logoutBtn" class="btn alt" style="width:100%;margin-top:20px">تسجيل خروج</button>
 </aside>
@@ -78,6 +78,40 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
 
 <section id="integrations" class="hide section"><div class="panel"><div class="toolbar"><h2>Integration Health Center</h2><button class="btn alt" onclick="loadIntegrations()">فحص الآن</button></div><div id="integrationList" class="grid modules"></div></div></section>
 
+<section id="content" class="hide section">
+  <div class="grid cols">
+    <div class="panel">
+      <div class="toolbar"><h2>Content Studio</h2><span class="pill">Brand Brain Connected</span></div>
+      <div class="field"><label>Brief</label><textarea id="contentBrief" placeholder="مثال: Reel علمي فاخر عن سيروم فيتامين C"></textarea></div>
+      <button class="btn" id="generateContent" style="margin-top:10px">توليد مسودة</button>
+      <div id="contentDraft" class="item hide" style="margin-top:10px"></div>
+    </div>
+    <div class="panel">
+      <h2>جدولة منشور</h2>
+      <div class="field"><label>العنوان</label><input id="schedTitle"></div>
+      <div class="field"><label>المنصة</label><select id="schedPlatform"><option>instagram</option><option>facebook</option><option>tiktok</option><option>whatsapp</option></select></div>
+      <div class="field"><label>التاريخ والوقت</label><input id="schedAt" type="datetime-local"></div>
+      <div class="field"><label>Caption / Message</label><textarea id="schedCaption"></textarea></div>
+      <div class="field"><label>Media URL (إن وجد)</label><input id="schedMediaUrl" placeholder="https://..."></div>
+      <button class="btn" onclick="schedulePost()">إنشاء وجدولة مع Approval</button>
+    </div>
+  </div>
+  <div class="panel section"><div class="toolbar"><h2>Content Calendar / Library</h2><button class="btn alt" onclick="loadContent()">تحديث</button></div><div id="contentList" class="list"></div></div>
+</section>
+
+<section id="analytics" class="hide section">
+  <div class="grid cols">
+    <div class="panel"><div class="toolbar"><h2>Performance</h2><button class="btn alt" onclick="loadAnalytics()">تحديث</button></div><div id="analyticsSummary" class="list"></div></div>
+    <div class="panel"><h2>أفضل أوقات النشر</h2><div id="bestTimeList" class="list"></div></div>
+  </div>
+  <div class="panel section">
+    <h2>Voice of Customer</h2>
+    <div class="field"><label>تعليق / سؤال عميل</label><textarea id="vocText"></textarea></div>
+    <div class="row"><select id="vocPlatform"><option>instagram</option><option>tiktok</option><option>facebook</option><option>whatsapp</option></select><button class="btn" onclick="addVoc()">تحليل وإضافة</button></div>
+    <div id="vocList" class="list" style="margin-top:12px"></div>
+  </div>
+</section>
+
 <section id="audit" class="hide section"><div class="panel"><div class="toolbar"><h2>Audit Log</h2><button class="btn alt" onclick="loadAudit()">تحديث</button></div><div id="auditList" class="list"></div></div></section>
 </main>
 </div>
@@ -112,7 +146,7 @@ async function boot(){const s=await fetch("/api/auth/status").then(r=>r.json());
 authBtn.onclick=async()=>{authMsg.textContent="";try{await api(authMode==="setup"?"/api/auth/setup":"/api/auth/login",{method:"POST",body:JSON.stringify({username:authUser.value.trim(),password:authPass.value})});authScreen.classList.add("hide");await refreshAll()}catch(e){authMsg.textContent=e.message==="password_min_10"?"كلمة المرور لازم تكون 10 أحرف على الأقل.":"تعذر الدخول/الإعداد."}}
 logoutBtn.onclick=async()=>{try{await api("/api/auth/logout",{method:"POST",body:"{}"})}catch{}showAuth("login")}
 
-document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="audit")loadAudit();});
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="audit")loadAudit();});
 function renderModules(){modules.innerHTML=MODULES.map((m,i)=>'<div class="card module" onclick="moduleInfo('+i+')"><div class="muted small">MODULE '+String(i+1).padStart(2,"0")+'</div><h3>'+m[0]+'</h3><div class="muted small">'+m[1]+'</div></div>').join("")}
 function moduleInfo(i){modalBody.innerHTML='<div class="muted small">MODULE '+(i+1)+'</div><h2 class="gold">'+MODULES[i][0]+'</h2><p>'+MODULES[i][1]+'</p><button class="btn" onclick="command.value=\'نفّذ مهمة ضمن وحدة '+MODULES[i][0]+'\';closeModal()">إرسال للمدير التنفيذي</button>';modal.classList.remove("hide")}
 function closeModal(){modal.classList.add("hide")}
@@ -133,6 +167,12 @@ async function togglePublic(id,v){await api("/api/assets/"+id+"/public",{method:
 
 async function loadLeads(){const d=await api("/api/leads");leadRows.innerHTML=d.items.map(x=>'<tr><td>'+x.id+'</td><td>'+esc(x.name)+'</td><td>'+esc(x.category||"")+'</td><td>'+esc(x.area||"")+'</td><td>'+esc(x.phone||x.email||"—")+'</td><td>'+x.fit_score+'</td><td>'+esc(x.priority||"")+'</td></tr>').join("")}
 async function newLead(){const name=prompt("اسم الجهة");if(!name)return;const category=prompt("الفئة","Pharmacy")||"";const area=prompt("المنطقة","Beirut")||"";const phone=prompt("هاتف عام","")||"";const fit_score=Number(prompt("Fit Score","80")||80);try{await api("/api/leads",{method:"POST",body:JSON.stringify({name,category,area,phone,fit_score})});await Promise.all([loadLeads(),refreshDashboard()])}catch(e){alert("قد يكون السجل مكررًا.")}}
+
+generateContent.onclick=async()=>{const brief=contentBrief.value.trim();if(!brief)return;generateContent.disabled=true;contentDraft.classList.remove("hide");contentDraft.textContent="جاري التوليد...";try{const d=await api("/api/content/generate",{method:"POST",body:JSON.stringify({brief})});const r=d.result||{};contentDraft.innerHTML='<b class="gold">'+esc(r.hook||"Draft")+'</b><div style="margin-top:8px">'+esc(r.body||r.raw||"")+'</div><div class="muted small" style="margin-top:8px">'+esc(r.caption||"")+'</div>';await api("/api/content",{method:"POST",body:JSON.stringify({title:brief,platform:"multi",format:"draft",hook:r.hook||"",body:r.body||r.raw||"",caption:r.caption||"",cta:r.cta||"",status:"draft"})});await Promise.all([loadContent(),refreshDashboard()])}catch(e){contentDraft.textContent="تعذر التوليد: "+e.message}finally{generateContent.disabled=false}}
+async function loadContent(){const d=await api("/api/content");contentList.innerHTML=d.items.length?d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">#'+x.id+' '+esc(x.title)+'</b><span class="status wait">'+esc(x.status)+'</span></div><div class="muted small">'+esc(x.platform||"")+' • '+esc(x.format||"")+(x.scheduled_at?' • '+esc(x.scheduled_at):'')+'</div>'+(x.hook?'<div style="margin-top:6px">'+esc(x.hook)+'</div>':'')+'</div>').join(""):'<div class="muted">لا محتوى بعد.</div>'}
+async function schedulePost(){const scheduledAt=schedAt.value?new Date(schedAt.value).toISOString():"";const platform=schedPlatform.value;const media=schedMediaUrl.value.trim();const payload={title:schedTitle.value||("Scheduled "+platform),platform,scheduledAt,caption:schedCaption.value,message:schedCaption.value};if(platform==="instagram"){if(media&&/\.mp4|video/i.test(media))payload.videoUrl=media;else if(media)payload.imageUrl=media}else if(platform==="tiktok"){payload.videoUrl=media;payload.title=schedCaption.value;payload.creatorConfirmed=true}else if(platform==="facebook"){payload.imageUrl=media}else if(platform==="whatsapp"){payload.to=prompt("رقم WhatsApp بصيغة دولية")||""}try{const d=await api("/api/schedule",{method:"POST",body:JSON.stringify(payload)});alert("تم إنشاء Job #"+d.jobId+" وبانتظار الموافقة.");await Promise.all([loadApprovals(),loadJobs(),refreshDashboard()])}catch(e){alert("تعذر الجدولة: "+e.message)}}
+async function loadAnalytics(){const [a,b,v]=await Promise.all([api("/api/analytics/summary"),api("/api/analytics/best-time"),api("/api/voc")]);analyticsSummary.innerHTML=a.byMetric.length?a.byMetric.map(x=>'<div class="item"><b>'+esc(x.platform)+' • '+esc(x.metric)+'</b><div class="num">'+x.total+'</div><div class="muted small">'+x.samples+' samples</div></div>').join(""):'<div class="muted">لا بيانات أداء بعد. ستظهر بعد ربط المنصات أو إدخال القياسات.</div>';bestTimeList.innerHTML=b.items.length?b.items.map(x=>'<div class="item"><b>'+esc(x.platform)+'</b><div>اليوم '+x.weekday+' • الساعة '+x.hour+':00</div><div class="muted small">Score '+x.score+' • '+x.samples+' samples</div></div>').join(""):'<div class="muted">نحتاج بيانات منشورة وتفاعل قبل حساب أفضل وقت.</div>';vocList.innerHTML=v.items.length?v.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.category||"other")+'</b><span class="status '+(x.sentiment==="negative"?"bad":x.sentiment==="positive"?"ok":"wait")+'">'+esc(x.sentiment||"neutral")+'</span></div><div>'+esc(x.text)+'</div><div class="muted small">'+esc(x.content_idea||"")+'</div></div>').join(""):'<div class="muted">لا VOC بعد.</div>'}
+async function addVoc(){const text=vocText.value.trim();if(!text)return;await api("/api/voc/ingest",{method:"POST",body:JSON.stringify({text,platform:vocPlatform.value})});vocText.value="";await loadAnalytics()}
 
 async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
 async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
