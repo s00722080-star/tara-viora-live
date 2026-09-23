@@ -1037,26 +1037,150 @@ app.post("/api/schedule",(req,res)=>{
   res.json({ok:true,jobId:id,approvalRequired:true});
 });
 
+const RETRY_DELAYS_MS=[60_000,5*60_000,15*60_000,30*60_000,60*60_000,2*60*60_000];
+let continuityState={lastRun:null,status:"IDLE",upcoming24h:0,recoveryQueue:0,humanActionRequired:0,issues:[]};
+
+function transientPublishError(message=""){
+  return /timeout|timed out|429|rate|temporar|unavailable|502|503|504|network|fetch failed|ECONN|EAI_AGAIN|socket|processing/i.test(String(message));
+}
+function authPublishError(message=""){
+  return /token|auth|permission|scope|reauth|unauthor|forbidden|access|credential/i.test(String(message));
+}
+function jobResult(job){return json(job.result_json,{})||{}}
+function saveJobResult(jobId,obj){run("UPDATE jobs SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(obj),jobId)}
+
+async function scheduledTikTokPublish(p,job){
+  const token=await tiktokAccessToken();if(!token)throw new Error("tiktok_not_connected");
+  const scope=String(getSecret("tiktok","scope")||"");
+  if(!scope.split(",").map(x=>x.trim()).includes("video.publish"))throw new Error("video_publish_scope_not_authorized");
+  const cr=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
+  const cd=await cr.json().catch(()=>({}));if(!cr.ok||cd?.error?.code!=="ok")throw new Error(cd?.error?.message||"tiktok_creator_info_failed");
+  const privacy=String(p.privacy_level||"SELF_ONLY"),allowed=cd?.data?.privacy_level_options||[];
+  if(allowed.length&&!allowed.includes(privacy))throw new Error("privacy_level_not_allowed");
+
+  let source_info,fileBuffer=null,mime="video/mp4",asset=null;
+  const assetId=Number(p.assetId||p.asset_id||0);
+  if(assetId){
+    asset=one("SELECT * FROM assets WHERE id=?",assetId);
+    if(!asset||!fs.existsSync(asset.path))throw new Error("scheduled_asset_missing");
+    const size=Number(fs.statSync(asset.path).size),maxChunk=64*1024*1024;
+    const chunkSize=Math.min(size,maxChunk),totalChunkCount=Math.max(1,Math.floor(size/chunkSize));
+    source_info={source:"FILE_UPLOAD",video_size:size,chunk_size:chunkSize,total_chunk_count:totalChunkCount};
+    fileBuffer=fs.readFileSync(asset.path);mime=asset.mime||mime;
+  }else{
+    const videoUrl=String(p.videoUrl||"").trim();if(!videoUrl)throw new Error("scheduled_tiktok_media_missing");
+    source_info={source:"PULL_FROM_URL",video_url:videoUrl};
+  }
+  const payload={post_info:{title:String(p.title||p.caption||"").slice(0,2200),privacy_level:privacy,disable_duet:Boolean(p.disable_duet),disable_comment:Boolean(p.disable_comment),disable_stitch:Boolean(p.disable_stitch),brand_organic_toggle:p.brand_organic_toggle!==false,is_aigc:Boolean(p.is_aigc)},source_info};
+  const r=await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:JSON.stringify(payload)});
+  const d=await r.json().catch(()=>({}));if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_publish_init_failed");
+  const prior=jobResult(job);saveJobResult(job.id,{...prior,publish:d,source:source_info.source,attemptAcceptedAt:new Date().toISOString()});
+  if(source_info.source==="FILE_UPLOAD"){
+    const uploadUrl=d?.data?.upload_url;if(!uploadUrl)throw new Error("tiktok_upload_url_missing");
+    const total=fileBuffer.length,chunkSize=source_info.chunk_size,totalCount=source_info.total_chunk_count;
+    let offset=0;
+    for(let i=0;i<totalCount;i++){
+      const remaining=total-offset,thisSize=(i===totalCount-1)?remaining:Math.min(chunkSize,remaining),last=offset+thisSize-1;
+      const chunk=fileBuffer.subarray(offset,last+1);
+      const ur=await fetch(uploadUrl,{method:"PUT",headers:{"Content-Type":mime,"Content-Length":String(chunk.length),"Content-Range":`bytes ${offset}-${last}/${total}`},body:chunk});
+      if(!ur.ok)throw new Error(`tiktok_file_upload_failed_${ur.status}`);
+      offset=last+1;
+    }
+  }
+  return {publish:d,source:source_info.source,assetId:asset?.id||null};
+}
+
+async function executeScheduled(job,p){
+  const platform=String(p.platform||"").toLowerCase();
+  if(platform==="instagram")return instagramPublish(p);
+  if(platform==="facebook")return facebookPublish(p);
+  if(platform==="whatsapp")return whatsappSend(p);
+  if(platform==="tiktok")return scheduledTikTokPublish(p,job);
+  throw new Error("unsupported_platform");
+}
+
+function scheduleRetry(job,error){
+  const prev=jobResult(job),attempts=Number(prev.retry?.attempts||0)+1;
+  if(attempts>RETRY_DELAYS_MS.length)return {retry:false,attempts};
+  const nextAt=new Date(Date.now()+RETRY_DELAYS_MS[attempts-1]).toISOString();
+  const result={...prev,retry:{attempts,nextAt,lastError:String(error),lastFailureAt:new Date().toISOString()}};
+  run("UPDATE jobs SET status='retry_wait',result_json=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),String(error),job.id);
+  audit("scheduled_publish_retry_scheduled",{entityType:"job",entityId:job.id,metadata:{attempts,nextAt,error:String(error)}});
+  return {retry:true,attempts,nextAt};
+}
+
 async function runScheduledJobs(){
-  const due=all("SELECT * FROM jobs WHERE type='scheduled_publish' AND status='approved' ORDER BY id LIMIT 10");
-  for(const job of due){
-    const p=json(job.payload_json),when=new Date(p.scheduledAt||0);
+  const candidates=all("SELECT * FROM jobs WHERE type='scheduled_publish' AND status IN ('approved','retry_wait') ORDER BY id LIMIT 50");
+  for(const job of candidates){
+    const p=json(job.payload_json),when=new Date(p.scheduledAt||0),rj=jobResult(job);
     if(!Number.isFinite(when.getTime())||when.getTime()>Date.now())continue;
-    run("UPDATE jobs SET status='running',updated_at=CURRENT_TIMESTAMP WHERE id=?",job.id);
+    if(job.status==="retry_wait"){
+      const nextAt=new Date(rj?.retry?.nextAt||0);if(Number.isFinite(nextAt.getTime())&&nextAt.getTime()>Date.now())continue;
+    }
+    run("UPDATE jobs SET status='running',error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",job.id);
+    const started={...rj,continuity:{...(rj.continuity||{}),attemptStartedAt:new Date().toISOString()}};
+    saveJobResult(job.id,started);
     try{
-      let result;
-      const platform=String(p.platform||"").toLowerCase();
-      if(platform==="instagram")result=await instagramPublish(p);
-      else if(platform==="facebook")result=await facebookPublish(p);
-      else if(platform==="whatsapp")result=await whatsappSend(p);
-      else if(platform==="tiktok"){const r=await postN8n("tara-viora-tiktok-publish",{...p,approved:true,creatorConfirmed:true});if(!r.ok)throw new Error("tiktok_publish_failed");result=r.data;}
-      else throw new Error("unsupported_platform");
-      run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);
-      audit("scheduled_publish_completed",{entityType:"job",entityId:job.id,metadata:{platform}});
-    }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);audit("scheduled_publish_failed",{entityType:"job",entityId:job.id,metadata:{error:String(e.message)}});}
+      const result=await executeScheduled({...job,result_json:JSON.stringify(started)},p);
+      run("UPDATE jobs SET status='completed',result_json=?,error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({...started,providerResult:result,retry:null,completedAt:new Date().toISOString()}),job.id);
+      audit("scheduled_publish_completed",{entityType:"job",entityId:job.id,metadata:{platform:p.platform}});
+    }catch(e){
+      const message=String(e.message||e),latest=one("SELECT * FROM jobs WHERE id=?",job.id)||job;
+      const accepted=Boolean(jobResult(latest)?.publish?.data?.publish_id);
+      if(accepted){
+        run("UPDATE jobs SET status='submitted',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",message,job.id);
+        audit("scheduled_publish_accepted_needs_status_check",{entityType:"job",entityId:job.id,metadata:{error:message}});
+      }else if(authPublishError(message)){
+        run("UPDATE jobs SET status='human_action_required',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",message,job.id);
+        audit("scheduled_publish_human_action_required",{entityType:"job",entityId:job.id,metadata:{error:message}});
+      }else if(transientPublishError(message)){
+        const retry=scheduleRetry(latest,message);
+        if(!retry.retry){
+          run("UPDATE jobs SET status='human_action_required',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",message,job.id);
+          audit("scheduled_publish_retry_exhausted",{entityType:"job",entityId:job.id,metadata:{error:message}});
+        }
+      }else{
+        run("UPDATE jobs SET status='human_action_required',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",message,job.id);
+        audit("scheduled_publish_human_action_required",{entityType:"job",entityId:job.id,metadata:{error:message}});
+      }
+    }
   }
 }
+
+async function publishingContinuityCycle(){
+  const issues=[];
+  const now=Date.now(),h24=now+24*60*60*1000,h7=now+7*24*60*60*1000;
+  const scheduled=all("SELECT * FROM jobs WHERE type='scheduled_publish' AND status NOT IN ('completed','rejected') ORDER BY id DESC LIMIT 500");
+  let upcoming24h=0,upcoming7d=0,recoveryQueue=0,humanActionRequired=0;
+  for(const job of scheduled){
+    const p=json(job.payload_json),t=new Date(p.scheduledAt||0).getTime();
+    if(Number.isFinite(t)&&t>=now&&t<=h24)upcoming24h++;
+    if(Number.isFinite(t)&&t>=now&&t<=h7)upcoming7d++;
+    if(job.status==="retry_wait")recoveryQueue++;
+    if(job.status==="human_action_required")humanActionRequired++;
+    if(Number.isFinite(t)&&t>=now&&t<=h24){
+      const platform=String(p.platform||"").toLowerCase();
+      if(platform==="tiktok"){
+        if(!hasSecret("tiktok","refresh_token"))issues.push({jobId:job.id,type:"tiktok_reauth_required"});
+        if(!String(getSecret("tiktok","scope")||"").split(",").map(x=>x.trim()).includes("video.publish"))issues.push({jobId:job.id,type:"tiktok_video_publish_missing"});
+        const aid=Number(p.assetId||p.asset_id||0);if(aid){const a=one("SELECT path FROM assets WHERE id=?",aid);if(!a||!fs.existsSync(a.path))issues.push({jobId:job.id,type:"media_missing"});}
+      }
+      if(platform==="instagram"&&!hasSecret("meta","access_token"))issues.push({jobId:job.id,type:"meta_reauth_required"});
+      if(platform==="facebook"&&!hasSecret("meta","access_token"))issues.push({jobId:job.id,type:"meta_reauth_required"});
+      if(platform==="whatsapp"&&(!hasSecret("whatsapp","access_token")||!hasSecret("whatsapp","phone_number_id")))issues.push({jobId:job.id,type:"whatsapp_reauth_required"});
+    }
+  }
+  continuityState={lastRun:new Date().toISOString(),status:humanActionRequired||issues.length?"ATTENTION":recoveryQueue?"RECOVERING":"HEALTHY",upcoming24h,upcoming7d,recoveryQueue,humanActionRequired,bufferDays:upcoming7d?7:0,issues};
+  return continuityState;
+}
+
 setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
+setInterval(()=>publishingContinuityCycle().catch(()=>{}),5*60*1000);
+setTimeout(()=>publishingContinuityCycle().catch(()=>{}),15000);
+
+app.get("/api/continuity/status",requireAuth,async(req,res)=>{try{res.json({ok:true,...await publishingContinuityCycle()})}catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}});
+app.post("/api/continuity/run",requireAuth,async(req,res)=>{try{await runScheduledJobs();res.json({ok:true,...await publishingContinuityCycle()})}catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}});
+
 
 app.use(express.static(path.join(__dirname,"public")));
 app.get("*",(_req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
