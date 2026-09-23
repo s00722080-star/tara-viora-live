@@ -686,24 +686,96 @@ app.post("/api/actions/higgsfield",async(req,res)=>{
   try{const r=await postN8n("tara-viora-render",{...req.body,approved:true});run("UPDATE jobs SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",r.ok?"submitted":"failed",JSON.stringify(r.data),job.id);audit("higgsfield_submit",{userId:req.user.id,entityType:"job",entityId:job.id});res.status(r.ok?200:502).json({ok:r.ok,result:r.data});}catch(e){res.status(502).json({ok:false,error:String(e.message)});}
 });
 app.post("/api/actions/tiktok",async(req,res)=>{
-  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));
+  if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   if(!req.body?.creatorConfirmed)return res.status(400).json({ok:false,error:"creator_confirmation_required"});
   try{
     const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
     const scope=String(getSecret("tiktok","scope")||"");
-    if(!scope.split(",").map(x=>x.trim()).includes("video.publish")) return res.status(409).json({ok:false,error:"video_publish_scope_not_authorized",connected:true});
-    const cr=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"});
-    const cd=await cr.json().catch(()=>({}));if(!cr.ok||cd?.error?.code!=="ok")throw new Error("tiktok_creator_info_failed");
+    if(!scope.split(",").map(x=>x.trim()).includes("video.publish"))return res.status(409).json({ok:false,error:"video_publish_scope_not_authorized",connected:true});
+
+    const cr=await fetch("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",{
+      method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:"{}"
+    });
+    const cd=await cr.json().catch(()=>({}));
+    if(!cr.ok||cd?.error?.code!=="ok")throw new Error(cd?.error?.message||"tiktok_creator_info_failed");
+
     const privacy=String(req.body?.privacy_level||"SELF_ONLY"),allowed=cd?.data?.privacy_level_options||[];
     if(allowed.length&&!allowed.includes(privacy))return res.status(400).json({ok:false,error:"privacy_level_not_allowed",allowed});
-    const videoUrl=String(req.body?.videoUrl||"").trim();if(!videoUrl)return res.status(400).json({ok:false,error:"video_url_required"});
-    const payload={post_info:{title:String(req.body?.title||"").slice(0,2200),privacy_level:privacy,brand_organic_toggle:req.body?.brand_organic_toggle!==false,is_aigc:Boolean(req.body?.is_aigc)},source_info:{source:"PULL_FROM_URL",video_url:videoUrl}};
-    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},body:JSON.stringify(payload)});
-    const d=await r.json().catch(()=>({}));if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_publish_init_failed");
-    run("UPDATE jobs SET status='submitted',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(d),job.id);
-    audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId:d?.data?.publish_id||null}});
-    res.json({ok:true,result:d});
-  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+
+    const post_info={
+      title:String(req.body?.title||"").slice(0,2200),
+      privacy_level:privacy,
+      disable_duet:Boolean(req.body?.disable_duet),
+      disable_comment:Boolean(req.body?.disable_comment),
+      disable_stitch:Boolean(req.body?.disable_stitch),
+      brand_organic_toggle:req.body?.brand_organic_toggle!==false,
+      is_aigc:Boolean(req.body?.is_aigc)
+    };
+
+    let source_info,asset=null,fileBuffer=null,mime="video/mp4";
+    const assetId=Number(req.body?.assetId||0);
+    if(assetId){
+      asset=one("SELECT * FROM assets WHERE id=?",assetId);
+      if(!asset)return res.status(404).json({ok:false,error:"asset_not_found"});
+      if(!fs.existsSync(asset.path))return res.status(404).json({ok:false,error:"asset_file_missing"});
+      const st=fs.statSync(asset.path),videoSize=Number(st.size);
+      if(!videoSize)return res.status(400).json({ok:false,error:"empty_video_file"});
+      mime=["video/mp4","video/quicktime","video/webm"].includes(asset.mime)?asset.mime:"video/mp4";
+      const MB=1024*1024,maxChunk=64*MB,minChunk=5*MB;
+      let chunkSize;
+      if(videoSize<=128*MB) chunkSize=Math.min(videoSize,maxChunk);
+      else chunkSize=maxChunk;
+      if(videoSize>=minChunk&&chunkSize<minChunk)chunkSize=minChunk;
+      const totalChunkCount=Math.max(1,Math.floor(videoSize/chunkSize));
+      source_info={source:"FILE_UPLOAD",video_size:videoSize,chunk_size:chunkSize,total_chunk_count:totalChunkCount};
+      fileBuffer=fs.readFileSync(asset.path);
+    }else{
+      const videoUrl=String(req.body?.videoUrl||"").trim();
+      if(!videoUrl)return res.status(400).json({ok:false,error:"asset_id_or_video_url_required"});
+      source_info={source:"PULL_FROM_URL",video_url:videoUrl};
+    }
+
+    const payload={post_info,source_info};
+    const r=await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/",{
+      method:"POST",
+      headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d?.error?.code!=="ok")throw new Error(d?.error?.message||"tiktok_publish_init_failed");
+
+    if(source_info.source==="FILE_UPLOAD"){
+      const uploadUrl=d?.data?.upload_url;
+      if(!uploadUrl)throw new Error("tiktok_upload_url_missing");
+      const total=fileBuffer.length,chunkSize=source_info.chunk_size,totalCount=source_info.total_chunk_count;
+      let offset=0;
+      for(let i=0;i<totalCount;i++){
+        const remaining=total-offset;
+        const thisSize=(i===totalCount-1)?remaining:Math.min(chunkSize,remaining);
+        const last=offset+thisSize-1;
+        const chunk=fileBuffer.subarray(offset,last+1);
+        const ur=await fetch(uploadUrl,{
+          method:"PUT",
+          headers:{"Content-Type":mime,"Content-Length":String(chunk.length),"Content-Range":`bytes ${offset}-${last}/${total}`},
+          body:chunk
+        });
+        if(!ur.ok){
+          const ut=await ur.text().catch(()=>"");
+          throw new Error(`tiktok_file_upload_failed_${ur.status}: ${ut.slice(0,300)}`);
+        }
+        offset=last+1;
+      }
+      if(offset!==total)throw new Error("tiktok_file_upload_incomplete");
+    }
+
+    run("UPDATE jobs SET status='submitted',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({publish:d,source:source_info.source,assetId:asset?.id||null}),job.id);
+    audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{publishId:d?.data?.publish_id||null,source:source_info.source,assetId:asset?.id||null}});
+    res.json({ok:true,result:d,source:source_info.source,assetId:asset?.id||null});
+  }catch(e){
+    run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);
+    res.status(502).json({ok:false,error:String(e.message)});
+  }
 });
 
 
