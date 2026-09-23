@@ -1,0 +1,60 @@
+name: Staging Safety Gate
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tara-viora-staging-gate
+  cancel-in-progress: true
+
+jobs:
+  test-and-promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Static checks
+        run: |
+          node --check server.js
+          node --check db.js
+          node --check db_worker.js
+
+      - name: Wait for matching staging deployment
+        shell: bash
+        run: |
+          TARGET="${GITHUB_SHA}"
+          URL="https://tara-viora-live-v3-production.up.railway.app/health/ready"
+          for i in $(seq 1 36); do
+            BODY=$(curl -sS --max-time 8 "$URL" 2>/dev/null || true)
+            if echo "$BODY" | grep -q "\"commit\":\"$TARGET\"" && echo "$BODY" | grep -q '"ok":true' && echo "$BODY" | grep -q '"mode":"STAGING"'; then
+              echo "Staging healthy on $TARGET"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Staging did not become healthy for $TARGET"
+          exit 1
+
+      - name: Promote tested staging commit to main
+        shell: bash
+        run: |
+          git config user.name "TARA VIORA Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin main staging
+          git checkout -B release-main origin/main
+          git merge --no-ff "$GITHUB_SHA" -m "Promote tested staging ${GITHUB_SHA}"
+          git push origin HEAD:main
