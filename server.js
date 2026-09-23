@@ -611,6 +611,208 @@ app.post("/api/content/:id/status",(req,res)=>{
   run("UPDATE content_items SET status=? WHERE id=?",status,id);audit("content_status_changed",{userId:req.user.id,entityType:"content",entityId:id,metadata:{status}});res.json({ok:true});
 });
 
+
+// Growth Intelligence / Smart Ads / Customer Data layer
+function customerHash(v){
+  const x=String(v||"").trim().toLowerCase();
+  return x?crypto.createHash("sha256").update(x).digest("hex"):null;
+}
+function hookPattern(hook=""){
+  const h=String(hook||"").trim();
+  if(!h)return "no_hook";
+  if(/[؟?]/.test(h))return "question";
+  if(/^\s*\d+/.test(h)||/\b\d+\b/.test(h))return "number";
+  if(/كيف|how to|طريقة|خطوات/i.test(h))return "how_to";
+  if(/خطأ|لا تفعل|توقفي|احذري|mistake|avoid/i.test(h))return "warning";
+  return "statement";
+}
+function upsertPattern(platform,type,key,score,evidence,metrics){
+  run(`INSERT INTO winning_patterns(platform,pattern_type,pattern_key,score,evidence_count,metrics_json,status,updated_at)
+       VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+       ON CONFLICT(platform,pattern_type,pattern_key) DO UPDATE SET
+       score=excluded.score,evidence_count=excluded.evidence_count,metrics_json=excluded.metrics_json,
+       status=excluded.status,updated_at=CURRENT_TIMESTAMP`,
+      platform,type,key,score,evidence,JSON.stringify(metrics),evidence>=3?"validated":"learning");
+}
+function metricWeight(metric){
+  const m=String(metric||"").toLowerCase();
+  if(m.includes("purchase")||m.includes("revenue")||m.includes("conversion"))return 7;
+  if(m.includes("lead"))return 6;
+  if(m.includes("share"))return 5;
+  if(m.includes("save"))return 4;
+  if(m.includes("comment"))return 3;
+  if(m.includes("watch")||m.includes("retention")||m.includes("completion"))return 3;
+  if(m.includes("click"))return 2.5;
+  if(m.includes("engagement"))return 2;
+  if(m.includes("view")||m.includes("reach"))return .5;
+  return 1;
+}
+
+app.post("/api/growth/signals",(req,res)=>{
+  const items=Array.isArray(req.body?.items)?req.body.items:[req.body];let added=0;
+  for(const x of items){
+    if(!x?.platform||!x?.signal_type||!Number.isFinite(Number(x?.value)))continue;
+    run("INSERT INTO growth_signals(platform,content_id,campaign_id,signal_type,value,dimension_json,measured_at) VALUES(?,?,?,?,?,?,?)",
+      String(x.platform).toLowerCase(),x.content_id||null,x.campaign_id||null,String(x.signal_type),Number(x.value),
+      JSON.stringify(x.dimensions||{}),x.measured_at||new Date().toISOString());added++;
+  }
+  audit("growth_signals_ingested",{userId:req.user.id,entityType:"growth",metadata:{added}});
+  res.json({ok:true,added});
+});
+
+app.get("/api/growth/signals",(req,res)=>res.json({ok:true,items:all("SELECT * FROM growth_signals ORDER BY id DESC LIMIT 500")}));
+
+app.post("/api/customer-data/events",(req,res)=>{
+  const items=Array.isArray(req.body?.items)?req.body.items:[req.body];let added=0;
+  for(const x of items){
+    if(!x?.source||!x?.event_type)continue;
+    const identifier=x.customer_key||x.phone||x.email||x.external_id||null;
+    run("INSERT INTO customer_events(source,customer_key_hash,event_type,content_id,campaign_id,value,consent_status,metadata_json,occurred_at) VALUES(?,?,?,?,?,?,?,?,?)",
+      String(x.source),customerHash(identifier),String(x.event_type),x.content_id||null,x.campaign_id||null,
+      Number(x.value||0),String(x.consent_status||"unknown"),JSON.stringify(x.metadata||{}),x.occurred_at||new Date().toISOString());
+    added++;
+  }
+  audit("customer_events_ingested",{userId:req.user.id,entityType:"customer_data",metadata:{added}});
+  res.json({ok:true,added,note:"Raw identifiers are not stored; only a one-way hash is kept when an identifier is supplied."});
+});
+
+app.get("/api/customer-data/summary",(req,res)=>{
+  const byEvent=all("SELECT source,event_type,count(*) count,round(sum(value),2) total_value FROM customer_events GROUP BY source,event_type ORDER BY count DESC");
+  const unique=one("SELECT count(DISTINCT customer_key_hash) c FROM customer_events WHERE customer_key_hash IS NOT NULL")?.c||0;
+  const recent=all("SELECT id,source,event_type,content_id,campaign_id,value,consent_status,occurred_at FROM customer_events ORDER BY id DESC LIMIT 100");
+  res.json({ok:true,uniquePeople:Number(unique),byEvent,recent});
+});
+
+app.post("/api/growth/analyze",async(req,res)=>{
+  const content=all("SELECT * FROM content_items ORDER BY id DESC LIMIT 300");
+  let analyzed=0;
+  for(const c of content){
+    const metrics=all("SELECT metric,value FROM analytics WHERE content_id=?",c.id);
+    if(!metrics.length)continue;
+    let score=0;const totals={};
+    for(const m of metrics){const k=String(m.metric);totals[k]=(totals[k]||0)+Number(m.value||0);score+=Number(m.value||0)*metricWeight(k)}
+    const normalized=Math.round(Math.log10(Math.max(1,score)+1)*100)/100;
+    const platform=String(c.platform||"unknown").toLowerCase();
+    upsertPattern(platform,"format",String(c.format||"unknown"),normalized,metrics.length,totals);
+    upsertPattern(platform,"hook",hookPattern(c.hook),normalized,metrics.length,totals);
+    analyzed++;
+  }
+  const winners=all("SELECT * FROM winning_patterns ORDER BY score DESC,evidence_count DESC LIMIT 30");
+  audit("winning_patterns_analyzed",{userId:req.user.id,entityType:"growth",metadata:{analyzed}});
+  res.json({ok:true,analyzed,winners});
+});
+
+app.get("/api/growth/winning-patterns",(req,res)=>res.json({ok:true,items:all("SELECT * FROM winning_patterns ORDER BY score DESC,evidence_count DESC LIMIT 100")}));
+
+app.post("/api/budget/optimizer/run",(req,res)=>{
+  const campaigns=all("SELECT * FROM campaigns WHERE status NOT IN ('archived','deleted') ORDER BY id DESC");
+  let created=0;
+  for(const c of campaigns){
+    const sig=all("SELECT signal_type,sum(value) v FROM growth_signals WHERE campaign_id=? GROUP BY signal_type",c.id);
+    const map=Object.fromEntries(sig.map(x=>[String(x.signal_type).toLowerCase(),Number(x.v||0)]));
+    const spend=Math.max(0,map.spend||0),revenue=Math.max(0,map.revenue||0),conversions=Math.max(0,map.conversions||map.purchases||0);
+    const leads=Math.max(0,map.leads||0),clicks=Math.max(0,map.clicks||0),impressions=Math.max(0,map.impressions||0);
+    const roas=spend>0?revenue/spend:0,ctr=impressions>0?clicks/impressions:0,cpa=conversions>0?spend/conversions:null;
+    let action="HOLD",factor=1,reason="بيانات غير كافية للتوسيع أو التخفيض.",confidence=.35;
+    if(spend>0&&conversions===0&&spend>=Math.max(10,Number(c.budget||0)*.2)){action="REDUCE";factor=.65;reason="مصروف واضح بدون تحويلات حتى الآن؛ نقترح خفضًا محافظًا بدل استمرار الهدر.";confidence=.78}
+    else if(roas>=2&&conversions>=2){action="INCREASE";factor=1.2;reason="العائد والتحويلات إيجابيان؛ نقترح زيادة تدريجية فقط، وليس قفزة كبيرة.";confidence=.82}
+    else if(roas>0&&roas<1&&spend>=10){action="REDUCE";factor=.75;reason="العائد الحالي أقل من المصروف؛ نقترح خفض الميزانية ومراجعة الـCreative والجمهور.";confidence=.72}
+    else if(leads>=3&&spend>0){action="HOLD";factor=1;reason="الحملة تولد Leads؛ نحتاج ربط المبيعات/الإيراد قبل قرار زيادة الإنفاق.";confidence=.62}
+    const current=Number(c.budget||0),suggested=Math.max(0,Math.round(current*factor*100)/100);
+    const prior=one("SELECT id FROM budget_recommendations WHERE campaign_id=? AND status='proposed' ORDER BY id DESC LIMIT 1",c.id);
+    if(prior)continue;
+    run("INSERT INTO budget_recommendations(campaign_id,platform,action,current_budget,suggested_budget,reason,confidence,status) VALUES(?,?,?,?,?,?,?,'proposed')",
+      c.id,c.platform,action,current,suggested,reason,confidence);
+    created++;
+  }
+  const items=all("SELECT * FROM budget_recommendations ORDER BY id DESC LIMIT 100");
+  audit("budget_optimizer_run",{userId:req.user.id,entityType:"budget",metadata:{created}});
+  res.json({ok:true,created,items});
+});
+
+app.get("/api/budget/recommendations",(req,res)=>res.json({ok:true,items:all("SELECT br.*,c.name campaign_name FROM budget_recommendations br LEFT JOIN campaigns c ON c.id=br.campaign_id ORDER BY br.id DESC LIMIT 100")}));
+
+app.post("/api/budget/recommendations/:id/prepare",(req,res)=>{
+  const r=one("SELECT br.*,c.name campaign_name FROM budget_recommendations br LEFT JOIN campaigns c ON c.id=br.campaign_id WHERE br.id=?",Number(req.params.id));
+  if(!r)return res.status(404).json({ok:false,error:"recommendation_not_found"});
+  if(r.status!=="proposed")return res.status(409).json({ok:false,error:"recommendation_not_proposed"});
+  const jobId=createJob({type:"budget_change",title:`Budget recommendation — ${r.campaign_name||"Campaign #"+r.campaign_id}`,
+    payload:{recommendationId:r.id,campaignId:r.campaign_id,platform:r.platform,action:r.action,currentBudget:r.current_budget,suggestedBudget:r.suggested_budget,reason:r.reason},
+    provider:String(r.platform||"ADS").toUpperCase(),requiresApproval:true,costEstimate:Math.max(0,Number(r.suggested_budget||0)-Number(r.current_budget||0))});
+  run("UPDATE budget_recommendations SET status='waiting_approval' WHERE id=?",r.id);
+  audit("budget_recommendation_prepared",{userId:req.user.id,entityType:"budget_recommendation",entityId:r.id,metadata:{jobId}});
+  res.json({ok:true,jobId,approvalRequired:true});
+});
+
+let metaWatcherState={lastRun:null,status:"IDLE",summary:null};
+app.get("/api/meta-watcher/status",(req,res)=>res.json({ok:true,...metaWatcherState,items:all("SELECT * FROM platform_updates WHERE platform IN ('meta','instagram','facebook') ORDER BY id DESC LIMIT 30")}));
+app.post("/api/meta-watcher/run",async(req,res)=>{
+  if(!client)return res.status(503).json({ok:false,error:"openai_web_research_not_configured"});
+  metaWatcherState={lastRun:new Date().toISOString(),status:"RUNNING",summary:null};
+  try{
+    const r=await client.responses.create({
+      model,tools:[{type:"web_search"}],
+      instructions:"ابحث فقط في المصادر الرسمية التابعة لـ Meta مثل about.fb.com وtransparency.meta.com وcreators.instagram.com وhelp.instagram.com. ركز على تحديثات Instagram/Facebook Reels والتوصيات والأهلية للمحتوى والإعلانات والقياس. لا تدّع وجود سر مضمون للفيرال. أرجع خلاصة عربية عملية مع ذكر تواريخ التغييرات وروابط المصادر إن ظهرت.",
+      input:"ما أحدث التغييرات الرسمية من Meta التي قد تؤثر على وصول المحتوى، Reels، التوصيات، المحتوى الأصلي، الإعلانات والقياس؟"
+    });
+    const summary=String(r.output_text||"").slice(0,12000);
+    run("INSERT INTO platform_updates(platform,title,summary,impact,status) VALUES('meta',?,?,?,'new')",
+      "Meta Watcher — latest official changes",summary,"review");
+    metaWatcherState={lastRun:new Date().toISOString(),status:"READY",summary};
+    audit("meta_watcher_run",{userId:req.user.id,entityType:"platform_updates"});
+    res.json({ok:true,...metaWatcherState});
+  }catch(e){
+    metaWatcherState={lastRun:new Date().toISOString(),status:"ERROR",summary:String(e.message||e)};
+    res.status(502).json({ok:false,error:String(e.message||e)});
+  }
+});
+
+let earlyWarningState={lastRun:null,status:"IDLE",alerts:[]};
+async function earlyWarningCycle(){
+  const alerts=[];
+  const add=(severity,category,title,details)=>{
+    alerts.push({severity,category,title,details});
+    const exists=one("SELECT id FROM system_alerts WHERE status='open' AND category=? AND title=? ORDER BY id DESC LIMIT 1",category,title);
+    if(!exists)run("INSERT INTO system_alerts(severity,category,title,details,status) VALUES(?,?,?,?,'open')",severity,category,title,details);
+  };
+  try{
+    const upcoming=all("SELECT payload_json,status FROM jobs WHERE type='scheduled_publish' AND status NOT IN ('completed','rejected') ORDER BY id DESC LIMIT 300");
+    const now=Date.now(),three=now+3*24*60*60*1000;
+    const count=upcoming.filter(j=>{const t=new Date(json(j.payload_json,{})?.scheduledAt||0).getTime();return Number.isFinite(t)&&t>=now&&t<=three}).length;
+    if(count<3)add("warning","content_buffer","مخزون النشر أقل من 3 منشورات خلال 3 أيام",`الموجود حاليًا: ${count}. يفضّل تجهيز محتوى احتياطي لتقليل خطر توقف النشر.`);
+  }catch{}
+  try{
+    if(hasSecret("tiktok","refresh_token")){
+      const exp=Number(getSecret("tiktok","expires_at")||0);
+      if(exp&&exp-Date.now()<24*60*60*1000)add("warning","tiktok","TikTok token يحتاج فحص قريب","صلاحية Access Token أقل من 24 ساعة؛ النظام سيحاول التجديد تلقائيًا.");
+    }
+  }catch{}
+  try{
+    const pending=Number(one("SELECT count(*) c FROM approvals WHERE status='pending'")?.c||0);
+    if(pending>=5)add("warning","approvals","عدد الموافقات المعلقة مرتفع",`هناك ${pending} موافقات معلقة وقد تؤخر التنفيذ.`);
+  }catch{}
+  try{
+    const failed=Number(one("SELECT count(*) c FROM jobs WHERE status IN ('failed','human_action_required')")?.c||0);
+    if(failed>=3)add("critical","jobs","مهام تحتاج متابعة",`هناك ${failed} مهام فاشلة أو تحتاج تدخلًا بشريًا.`);
+  }catch{}
+  earlyWarningState={lastRun:new Date().toISOString(),status:alerts.some(x=>x.severity==="critical")?"CRITICAL":alerts.length?"ATTENTION":"HEALTHY",alerts};
+  return earlyWarningState;
+}
+setInterval(()=>earlyWarningCycle().catch(()=>{}),15*60*1000);
+setTimeout(()=>earlyWarningCycle().catch(()=>{}),45*1000);
+
+app.get("/api/alerts",async(req,res)=>res.json({ok:true,...await earlyWarningCycle(),history:all("SELECT * FROM system_alerts ORDER BY id DESC LIMIT 100")}));
+app.post("/api/alerts/:id/resolve",(req,res)=>{run("UPDATE system_alerts SET status='resolved',resolved_at=CURRENT_TIMESTAMP WHERE id=?",Number(req.params.id));res.json({ok:true})});
+
+app.get("/api/growth/executive",async(req,res)=>{
+  const patterns=all("SELECT * FROM winning_patterns ORDER BY score DESC,evidence_count DESC LIMIT 8");
+  const budget=all("SELECT br.*,c.name campaign_name FROM budget_recommendations br LEFT JOIN campaigns c ON c.id=br.campaign_id WHERE br.status IN ('proposed','waiting_approval') ORDER BY br.id DESC LIMIT 8");
+  const customer=one("SELECT count(*) events,count(DISTINCT customer_key_hash) people FROM customer_events");
+  const alerts=(await earlyWarningCycle()).alerts;
+  const spend=Number(one("SELECT coalesce(sum(amount),0) v FROM spend")?.v||0);
+  res.json({ok:true,patterns,budget,customer:{events:Number(customer?.events||0),people:Number(customer?.people||0)},alerts,spend,metaWatcher:metaWatcherState});
+});
+
 app.post("/api/analytics/ingest",(req,res)=>{
   const rows=Array.isArray(req.body?.items)?req.body.items:[req.body];
   let count=0;
