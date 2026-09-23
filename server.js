@@ -160,8 +160,8 @@ app.get("/health/deep",async(_req,res)=>{
   res.status(ok?200:503).json({ok,db:dbOk?"READY":"ERROR",volume:volumeOk?"READY":"ERROR",ffmpeg:ffmpegOk?"READY":"ERROR",n8n:n8nOk?"READY":"ERROR",higgsfield});
 });
 app.get("/api/status",(req,res)=>res.json({ok:true,configured:authStatus(),executive:client?"OPENAI_CONFIGURED":"LOCAL_ROUTER",n8n:n8nBase?"CONNECTED":"NOT_CONNECTED",model}));
-app.get("/api/maintenance/status",(req,res)=>res.json({ok:true,...maintenanceState}));
-app.post("/api/maintenance/run",async(req,res)=>{
+app.get("/api/maintenance/status",requireAuth,(req,res)=>res.json({ok:true,...maintenanceState}));
+app.post("/api/maintenance/run",requireAuth,async(req,res)=>{
   try{const r=await maintenanceCycle({manual:true,userId:req.user?.id||null});res.json({ok:true,...r})}
   catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}
 });
