@@ -222,6 +222,55 @@ app.post("/api/video/process",async(req,res)=>{
   }
 });
 
+
+app.post("/api/video/compose",async(req,res)=>{
+  const b=req.body||{},video=one("SELECT * FROM assets WHERE id=?",Number(b.assetId));
+  if(!video)return res.status(404).json({ok:false,error:"asset_not_found"});
+  const logo=b.logoAssetId?one("SELECT * FROM assets WHERE id=?",Number(b.logoAssetId)):null;
+  const music=b.musicAssetId?one("SELECT * FROM assets WHERE id=?",Number(b.musicAssetId)):null;
+  const out=path.join(renderDir,`cinematic-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.mp4`);
+  const args=["-y"];
+  if(Number(b.start)>0)args.push("-ss",String(Number(b.start)));
+  args.push("-i",video.path);
+  let logoIndex=-1,musicIndex=-1,next=1;
+  if(logo){logoIndex=next++;args.push("-i",logo.path);}
+  if(music){musicIndex=next++;args.push("-stream_loop","-1","-i",music.path);}
+  if(Number(b.duration)>0)args.push("-t",String(Number(b.duration)));
+
+  let base="eq=contrast=1.05:saturation=1.08:brightness=0.01,fade=t=in:st=0:d=0.25";
+  if(b.aspect==="9:16")base+=",scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2";
+  else if(b.aspect==="1:1")base+=",scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2";
+  else if(b.aspect==="16:9")base+=",scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2";
+  const filters=[`[0:v]${base}[v0]`];
+  let current="v0",stage=1,textFile=null;
+  if(String(b.overlayText||"").trim()){
+    textFile=path.join(DATA_DIR,`overlay-${Date.now()}-${crypto.randomBytes(3).toString("hex")}.txt`);
+    fs.writeFileSync(textFile,String(b.overlayText),"utf8");
+    filters.push(`[${current}]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile='${textFile.replaceAll("'","\\'")}':fontcolor=white:fontsize=${Number(b.fontSize||46)}:borderw=2:bordercolor=black@0.45:x=(w-text_w)/2:y=h-text_h-120[v${stage}]`);
+    current=`v${stage++}`;
+  }
+  if(logo){
+    filters.push(`[${logoIndex}:v]scale=${Number(b.logoWidth||190)}:-1[lg]`);
+    filters.push(`[${current}][lg]overlay=W-w-35:35[v${stage}]`);
+    current=`v${stage++}`;
+  }
+  args.push("-filter_complex",filters.join(";"),"-map",`[${current}]`);
+  if(music){
+    args.push("-map",`${musicIndex}:a:0`,"-shortest","-af",`volume=${Number(b.musicVolume||0.22)}`);
+  }else args.push("-map","0:a?");
+  args.push("-c:v","libx264","-preset","medium","-crf",String(b.crf||19),"-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-movflags","+faststart",out);
+
+  const jobId=createJob({type:"pro_video_edit",title:`Pro edit ${video.name}`,payload:b,provider:"FFMPEG_PRO",status:"running"});
+  try{
+    await ffmpeg(args);
+    if(textFile)try{fs.unlinkSync(textFile)}catch{}
+    const st=fs.statSync(out), ar=run("INSERT INTO assets(name,kind,path,mime,size_bytes,source_asset_id,metadata_json) VALUES(?,?,?,?,?,?,?)",
+      path.basename(out),"cinematic_video",out,"video/mp4",st.size,video.id,JSON.stringify({aspect:b.aspect||"original",logoAssetId:b.logoAssetId||null,musicAssetId:b.musicAssetId||null,overlayText:Boolean(b.overlayText)}));
+    const assetId=Number(ar.lastInsertRowid);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({assetId}),jobId);
+    audit("pro_video_composed",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{assetId}});res.json({ok:true,jobId,assetId});
+  }catch(e){if(textFile)try{fs.unlinkSync(textFile)}catch{};run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),jobId);res.status(500).json({ok:false,error:"video_compose_failed",detail:String(e.message).slice(-700)});}
+});
+
 // Content/Research intelligence
 app.post("/api/content/generate",async(req,res)=>{
   const q=String(req.body?.brief||req.body?.command||"").trim(); if(!q)return res.status(400).json({ok:false,error:"brief_required"});
