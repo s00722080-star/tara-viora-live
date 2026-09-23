@@ -127,6 +127,47 @@ app.get("/health/deep",async(_req,res)=>{
 });
 app.get("/api/status",(req,res)=>res.json({ok:true,configured:authStatus(),executive:client?"OPENAI_CONFIGURED":"LOCAL_ROUTER",n8n:n8nBase?"CONNECTED":"NOT_CONNECTED",model}));
 
+
+// Public platform webhooks (verification + inbound events)
+app.get("/webhooks/meta",(req,res)=>{
+  const token=process.env.WEBHOOK_VERIFY_TOKEN;
+  if(token && req.query["hub.mode"]==="subscribe" && req.query["hub.verify_token"]===token) return res.status(200).send(String(req.query["hub.challenge"]||""));
+  return res.sendStatus(403);
+});
+app.post("/webhooks/meta",(req,res)=>{
+  try{
+    const secret=process.env.META_APP_SECRET;
+    if(secret){
+      const sig=String(req.headers["x-hub-signature-256"]||"");
+      const expected="sha256="+crypto.createHmac("sha256",secret).update(JSON.stringify(req.body||{})).digest("hex");
+      if(sig && sig!==expected)return res.sendStatus(403);
+    }
+    const entries=Array.isArray(req.body?.entry)?req.body.entry:[];
+    for(const entry of entries){
+      const changes=Array.isArray(entry.changes)?entry.changes:[];
+      for(const ch of changes){
+        const v=ch.value||{};
+        const messages=Array.isArray(v.messages)?v.messages:[];
+        for(const m of messages){
+          const txt=m?.text?.body||m?.button?.text||m?.interactive?.button_reply?.title||"";
+          if(txt){
+            try{run("INSERT INTO voc_items(platform,external_id,text,category,sentiment,intent,content_idea) VALUES(?,?,?,?,?,?,?)",
+              "whatsapp",m.id||null,String(txt),"inbound","neutral","customer_message","راجع الرسالة وحوّل الأسئلة المتكررة إلى محتوى");}catch{}
+          }
+        }
+        const comments=Array.isArray(v.comments)?v.comments:[];
+        for(const c of comments){
+          const txt=c?.text||c?.message||"";if(!txt)continue;
+          try{run("INSERT INTO voc_items(platform,external_id,text,category,sentiment,intent,content_idea) VALUES(?,?,?,?,?,?,?)",
+            "instagram",c.id||null,String(txt),"comment","neutral","social_comment","حوّل السؤال أو الاعتراض إلى Hook أو FAQ");}catch{}
+        }
+      }
+    }
+    audit("meta_webhook_received",{entityType:"webhook",metadata:{entries:entries.length}});
+  }catch{}
+  res.sendStatus(200);
+});
+
 // Everything below is private
 app.use("/api", (req,res,next)=>{
   if(["/auth/status","/auth/setup","/auth/login","/status"].includes(req.path)) return next();
