@@ -67,6 +67,33 @@ export function setting(key,value){
   run("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP",key,String(value));return value;
 }
 
+function migrateLegacySqlite(){
+  if(!databaseUrl||!fs.existsSync(sqlitePath))return;
+  try{
+    const done=one("SELECT value FROM settings WHERE key=?","legacy_sqlite_migrated_v1");
+    if(done?.value==="1")return;
+    const legacy=new DatabaseSync(sqlitePath,{readOnly:true});
+    const tables=["settings","users","sessions","jobs","approvals","audit_log","assets","leads","content_items","analytics","spend","brand_knowledge","voc_items","campaigns","experiments"];
+    const existing=new Set(legacy.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(x=>x.name));
+    for(const table of tables){
+      if(!existing.has(table))continue;
+      const rows=legacy.prepare(`SELECT * FROM ${table}`).all();
+      for(const row of rows){
+        const cols=Object.keys(row); if(!cols.length)continue;
+        const placeholders=cols.map(()=>"?").join(",");
+        const vals=cols.map(c=>row[c]);
+        try{run(`INSERT INTO ${table}(${cols.join(",")}) VALUES(${placeholders}) ON CONFLICT DO NOTHING`,...vals)}catch{}
+      }
+    }
+    for(const table of ["users","jobs","approvals","audit_log","assets","leads","content_items","analytics","spend","brand_knowledge","voc_items","campaigns","experiments"]){
+      try{run(`SELECT setval(pg_get_serial_sequence('${table}','id'), GREATEST(COALESCE((SELECT MAX(id) FROM ${table}),1),1), true)`)}catch{}
+    }
+    run("INSERT INTO settings(key,value,updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP","legacy_sqlite_migrated_v1","1");
+    legacy.close();
+  }catch{}
+}
+migrateLegacySqlite();
+
 function seedBrand(){
   const c=Number(one("SELECT count(*) c FROM brand_knowledge")?.c||0);
   if(c===0){
