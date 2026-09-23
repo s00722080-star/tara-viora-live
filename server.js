@@ -112,6 +112,37 @@ app.get("/api/status", (_req, res) => res.json({
 }));
 
 
+app.get("/api/higgsfield-check", async (_req, res) => {
+  if (!n8nBase) return res.status(503).json({ok:false, provider:"NOT_CONNECTED", reason:"n8n_not_connected"});
+  try {
+    const nr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        command:"TARA VIORA Higgsfield connectivity preflight",
+        prompt:"Connectivity check only. Do not render.",
+        approved:false,
+        source:"higgsfield-preflight"
+      })
+    });
+    const raw = await nr.text();
+    let result; try { result = JSON.parse(raw); } catch { result = {raw}; }
+    const provider = result?.provider || "UNKNOWN";
+    const safeBlocked = result?.finalRenderBlocked === true && result?.approvalRequired === true;
+    res.status(nr.ok && safeBlocked ? 200 : 502).json({
+      ok:Boolean(nr.ok && safeBlocked && provider === "HIGGSFIELD_READY"),
+      provider,
+      n8nStatus:nr.status,
+      finalRenderBlocked:result?.finalRenderBlocked,
+      approvalRequired:result?.approvalRequired,
+      paidRenderTriggered:false,
+      result
+    });
+  } catch (err) {
+    res.status(502).json({ok:false, provider:"UNKNOWN", paidRenderTriggered:false, error:String(err?.message||err)});
+  }
+});
+
 app.get("/api/selftest", async (_req, res) => {
   if (!n8nBase) return res.status(503).json({ok:false,n8n:"NOT_CONNECTED"});
   try {
