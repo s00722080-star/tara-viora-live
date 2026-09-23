@@ -707,10 +707,16 @@ app.post("/api/actions/higgsfield",async(req,res)=>{
   try{const r=await postN8n("tara-viora-render",{...req.body,approved:true});run("UPDATE jobs SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",r.ok?"submitted":"failed",JSON.stringify(r.data),job.id);audit("higgsfield_submit",{userId:req.user.id,entityType:"job",entityId:job.id});res.status(r.ok?200:502).json({ok:r.ok,result:r.data});}catch(e){res.status(502).json({ok:false,error:String(e.message)});}
 });
 app.post("/api/actions/tiktok",async(req,res)=>{
-  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));
-  const approval=job?one("SELECT status FROM approvals WHERE job_id=? ORDER BY id DESC LIMIT 1",job.id):null;
-  const approvalValid=Boolean(job&&(job.status==="approved"||approval?.status==="approved"));
-  if(!approvalValid)return res.status(403).json({ok:false,error:"approved_job_required"});
+  const requestedJobId=Number(req.body?.jobId);
+  const job=one("SELECT * FROM jobs WHERE id=?",requestedJobId);
+  const approval=job?one("SELECT status,decided_at FROM approvals WHERE job_id=? ORDER BY id DESC LIMIT 1",job.id):null;
+  const approvalValid=Boolean(job&&(job.status==="approved"||Boolean(job.approved_at)||approval?.status==="approved"));
+  if(!approvalValid)return res.status(403).json({
+    ok:false,error:"approved_job_required",
+    requestedJobId:Number.isFinite(requestedJobId)?requestedJobId:null,
+    jobFound:Boolean(job),jobStatus:job?.status||null,
+    approvedAt:job?.approved_at||null,approvalStatus:approval?.status||null
+  });
   if(!req.body?.creatorConfirmed)return res.status(400).json({ok:false,error:"creator_confirmation_required"});
   try{
     const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
