@@ -160,7 +160,107 @@ app.get("/health/deep",async(_req,res)=>{
   res.status(ok?200:503).json({ok,db:dbOk?"READY":"ERROR",volume:volumeOk?"READY":"ERROR",ffmpeg:ffmpegOk?"READY":"ERROR",n8n:n8nOk?"READY":"ERROR",higgsfield});
 });
 app.get("/api/status",(req,res)=>res.json({ok:true,configured:authStatus(),executive:client?"OPENAI_CONFIGURED":"LOCAL_ROUTER",n8n:n8nBase?"CONNECTED":"NOT_CONNECTED",model}));
+app.get("/api/maintenance/status",(req,res)=>res.json({ok:true,...maintenanceState}));
+app.post("/api/maintenance/run",async(req,res)=>{
+  try{const r=await maintenanceCycle({manual:true,userId:req.user?.id||null});res.json({ok:true,...r})}
+  catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}
+});
 
+
+
+// Self-healing maintenance bot
+let maintenanceState={lastRun:null,status:"IDLE",checks:{},repairs:[],errors:[]};
+
+async function maintenanceCycle({manual=false,userId=null}={}){
+  const checks={},repairs=[],errors=[];
+  const started=new Date().toISOString();
+  maintenanceState={lastRun:started,status:"RUNNING",checks:{},repairs:[],errors:[]};
+
+  try{
+    checks.database=Number(one("SELECT 1 v")?.v)===1?"READY":"ERROR";
+  }catch(e){checks.database="ERROR";errors.push("database:"+String(e.message||e))}
+
+  try{
+    const hp=path.join(DATA_DIR,".maintenance-health");
+    fs.writeFileSync(hp,"ok");checks.volume=fs.readFileSync(hp,"utf8")==="ok"?"READY":"ERROR";fs.unlinkSync(hp);
+  }catch(e){checks.volume="ERROR";errors.push("volume:"+String(e.message||e))}
+
+  try{checks.ffmpeg=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0?"READY":"ERROR"}catch(e){checks.ffmpeg="ERROR";errors.push("ffmpeg:"+String(e.message||e))}
+
+  try{
+    const before=one("SELECT COUNT(*) c FROM sessions WHERE expires_at<=CURRENT_TIMESTAMP")?.c||0;
+    if(Number(before)>0){run("DELETE FROM sessions WHERE expires_at<=CURRENT_TIMESTAMP");repairs.push(`expired_sessions_cleaned:${before}`)}
+    checks.sessions="READY";
+  }catch(e){checks.sessions="ERROR";errors.push("sessions:"+String(e.message||e))}
+
+  try{
+    const stale=all("SELECT id FROM jobs WHERE status IN ('running','queued') AND updated_at < CURRENT_TIMESTAMP - INTERVAL '2 hours' LIMIT 50");
+    for(const j of stale){run("UPDATE jobs SET status='failed',error='maintenance_stale_job',updated_at=CURRENT_TIMESTAMP WHERE id=?",j.id)}
+    if(stale.length)repairs.push(`stale_jobs_closed:${stale.length}`);
+    checks.jobs="READY";
+  }catch(e){
+    // SQLite fallback syntax
+    try{
+      const stale=all("SELECT id FROM jobs WHERE status IN ('running','queued') AND datetime(updated_at) < datetime('now','-2 hours') LIMIT 50");
+      for(const j of stale){run("UPDATE jobs SET status='failed',error='maintenance_stale_job',updated_at=CURRENT_TIMESTAMP WHERE id=?",j.id)}
+      if(stale.length)repairs.push(`stale_jobs_closed:${stale.length}`);
+      checks.jobs="READY";
+    }catch(e2){checks.jobs="ERROR";errors.push("jobs:"+String(e2.message||e2))}
+  }
+
+  if(n8nBase){
+    try{
+      const r=await postN8n("tara-viora-higgsfield-check",{source:"maintenance-bot"});
+      checks.n8n=r.ok?"READY":"ERROR";
+      checks.higgsfield=r.data?.provider||"UNKNOWN";
+    }catch(e){checks.n8n="ERROR";checks.higgsfield="ERROR";errors.push("n8n:"+String(e.message||e))}
+  }else{checks.n8n="NOT_CONNECTED";checks.higgsfield="NOT_CONNECTED"}
+
+  try{
+    if(hasSecret("tiktok","refresh_token")){
+      const token=await tiktokAccessToken();
+      checks.tiktok=token?"CONNECTED":"ERROR";
+      checks.tiktokPublish=String(getSecret("tiktok","scope")||"").split(",").map(x=>x.trim()).includes("video.publish")?"READY":"WAITING";
+      if(token)repairs.push("tiktok_token_checked");
+    }else{checks.tiktok="NOT_CONNECTED";checks.tiktokPublish="WAITING"}
+  }catch(e){checks.tiktok="REAUTH_REQUIRED";checks.tiktokPublish="WAITING";errors.push("tiktok:"+String(e.message||e))}
+
+  try{
+    const pending=all("SELECT id,result_json FROM jobs WHERE type='tiktok_publish' AND status='submitted' ORDER BY id DESC LIMIT 20");
+    for(const job of pending){
+      const stored=json(job.result_json,{})||{};
+      const publishId=stored?.publish?.data?.publish_id||stored?.publish_id;
+      if(!publishId)continue;
+      try{
+        const token=await tiktokAccessToken();if(!token)break;
+        const r=await fetch("https://open.tiktokapis.com/v2/post/publish/status/fetch/",{
+          method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json; charset=UTF-8"},
+          body:JSON.stringify({publish_id:publishId})
+        });
+        const d=await r.json().catch(()=>({}));
+        if(r.ok&&d?.error?.code==="ok"){
+          const st=String(d?.data?.status||"UNKNOWN");
+          const mapped=st==="PUBLISH_COMPLETE"?"completed":st==="FAILED"?"failed":"submitted";
+          const merged={...stored,tiktokStatus:d.data,statusCheckedAt:new Date().toISOString()};
+          run("UPDATE jobs SET status=?,result_json=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            mapped,JSON.stringify(merged),st==="FAILED"?String(d?.data?.fail_reason||"tiktok_publish_failed"):null,job.id);
+          if(mapped!=="submitted")repairs.push(`tiktok_job_${job.id}_${mapped}`);
+        }
+      }catch(e){errors.push(`tiktok_job_${job.id}:`+String(e.message||e))}
+    }
+    checks.tiktokJobs="READY";
+  }catch(e){checks.tiktokJobs="ERROR";errors.push("tiktokJobs:"+String(e.message||e))}
+
+  const critical=["database","volume","ffmpeg"].some(k=>checks[k]==="ERROR");
+  const degraded=errors.length>0||Object.values(checks).some(v=>["ERROR","REAUTH_REQUIRED"].includes(v));
+  const status=critical?"CRITICAL":degraded?"DEGRADED":"HEALTHY";
+  maintenanceState={lastRun:new Date().toISOString(),status,checks,repairs,errors};
+  try{audit("maintenance_cycle",{userId,entityType:"maintenance",metadata:{manual,status,checks,repairs,errors}})}catch{}
+  return maintenanceState;
+}
+
+setInterval(()=>{maintenanceCycle().catch(()=>{})},10*60*1000);
+setTimeout(()=>{maintenanceCycle().catch(()=>{})},30*1000);
 
 // Public platform webhooks (verification + inbound events)
 app.get("/webhooks/meta",(req,res)=>{
