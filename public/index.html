@@ -84,7 +84,49 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
 
 <section id="brand" class="hide section"><div class="grid cols"><div class="panel"><h2>Brand Brain</h2><div id="brandList" class="list"></div></div><div class="panel"><h3>إضافة معرفة</h3><div class="field"><label>النوع</label><input id="bkKind" placeholder="product / claim / audience / rule"></div><div class="field"><label>العنوان</label><input id="bkTitle"></div><div class="field"><label>المحتوى</label><textarea id="bkContent"></textarea></div><button class="btn" onclick="addKnowledge()">حفظ</button></div></div></section>
 
-<section id="integrations" class="hide section"><div class="panel"><div class="toolbar"><h2>Integration Health Center</h2><button class="btn alt" onclick="loadIntegrations()">فحص الآن</button></div><div id="integrationList" class="grid modules"></div></div></section>
+<section id="integrations" class="hide section">
+  <div class="panel">
+    <div class="toolbar"><div><h2>Integration Health Center</h2><div class="muted small">المفاتيح تُحفظ مشفّرة على السيرفر ولا تظهر في الواجهة بعد الحفظ.</div></div><button class="btn alt" onclick="loadIntegrations()">فحص الآن</button></div>
+    <div id="integrationList" class="grid modules"></div>
+  </div>
+
+  <div class="grid cols section">
+    <div class="panel">
+      <h2>TikTok</h2>
+      <div class="field"><label>Client Key</label><input id="ttClientKey" autocomplete="off"></div>
+      <div class="field"><label>Client Secret</label><input id="ttClientSecret" type="password" autocomplete="new-password"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveTikTokDev()">حفظ بيانات Developer</button><button class="btn alt" onclick="connectTikTok()">ربط حساب TikTok</button><button class="btn alt" onclick="checkProvider('tiktok')">فحص</button></div>
+      <div id="ttMsg" class="muted small" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Meta / Instagram / Facebook</h2>
+      <div class="field"><label>Access Token</label><input id="metaToken" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>Facebook Page ID</label><input id="metaPage"></div>
+      <div class="field"><label>Instagram Business User ID</label><input id="metaIg"></div>
+      <div class="field"><label>Graph Version</label><input id="metaVersion" value="v24.0"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveMeta()">حفظ وربط</button><button class="btn alt" onclick="checkProvider('meta')">فحص</button></div>
+      <div id="metaMsg" class="muted small" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="grid cols section">
+    <div class="panel">
+      <h2>WhatsApp Business</h2>
+      <div class="field"><label>Access Token</label><input id="waToken" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>Phone Number ID</label><input id="waPhoneId"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveWhatsApp()">حفظ وربط</button><button class="btn alt" onclick="checkProvider('whatsapp')">فحص</button></div>
+      <div id="waMsg" class="muted small" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>ElevenLabs</h2>
+      <div class="field"><label>API Key</label><input id="elKey" type="password" autocomplete="new-password"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveElevenLabs()">حفظ وربط</button><button class="btn alt" onclick="checkProvider('elevenlabs')">فحص</button></div>
+      <div id="elMsg" class="muted small" style="margin-top:8px"></div>
+    </div>
+  </div>
+</section>
 
 <section id="content" class="hide section">
   <div class="grid cols">
@@ -195,7 +237,14 @@ async function addVoc(){const text=vocText.value.trim();if(!text)return;await ap
 async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
 async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
 
-async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div></div>').join("")}
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div></div>').join("");window.integrationRedirects=d.redirects||{}}
+async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
+async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
+async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
+async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
+async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
+async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
+async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
 async function loadAudit(){const d=await api("/api/audit");auditList.innerHTML=d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.event)+'</b><span class="muted small">'+x.created_at+'</span></div><div class="muted small">'+esc(x.entity_type||"")+' '+esc(x.entity_id||"")+'</div></div>').join("")}
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 boot();
