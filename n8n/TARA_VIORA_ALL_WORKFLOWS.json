@@ -819,6 +819,215 @@
           480,
           0
         ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-tiktok-check",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "ttcheck-w",
+        "name": "TikTok Check Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          260
+        ],
+        "webhookId": "77777777-abcd-4777-8777-777777777778"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{'Bearer ' + $env.TIKTOK_ACCESS_TOKEN}}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=UTF-8"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "ttcheck-http",
+        "name": "TikTok Creator Check",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          250,
+          260
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const j=$json||{}; const ok=j?.error?.code==='ok' && !!j?.data; return [{json:{ok,provider:ok?'TIKTOK_READY':'TIKTOK_NOT_CONNECTED',publishingTriggered:false,check:'creator_info'}}];"
+        },
+        "id": "ttcheck-code",
+        "name": "Normalize TikTok Check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          260
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "ttcheck-r",
+        "name": "Respond TikTok Check",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          750,
+          260
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-tiktok-publish",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "ttpub-w",
+        "name": "TikTok Publish Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          520
+        ],
+        "webhookId": "77777777-abcd-4777-8777-777777777779"
+      },
+      {
+        "parameters": {
+          "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const creatorConfirmed=Boolean(b.creatorConfirmed); const videoUrl=String(b.videoUrl||'').trim(); const title=String(b.title||'').slice(0,2200); const privacy=String(b.privacy_level||'SELF_ONLY'); const isAigc=Boolean(b.is_aigc); const brandOrganic=b.brand_organic_toggle!==false; const hasCreds=Boolean($env.TIKTOK_ACCESS_TOKEN); const ready=approved&&creatorConfirmed&&hasCreds&&!!videoUrl; return [{json:{approved,creatorConfirmed,videoUrl,title,privacy,isAigc,brandOrganic,hasCreds,ready,approvalRequired:!approved,publishingBlocked:!ready}}];"
+        },
+        "id": "ttpub-prep",
+        "name": "Prepare TikTok Publish",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          230,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": false,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "leftValue": "={{$json.ready}}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "ttpub-if",
+        "name": "TikTok Approved + Ready?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          470,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{'Bearer ' + $env.TIKTOK_ACCESS_TOKEN}}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=UTF-8"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({post_info:{title:$json.title,privacy_level:$json.privacy,brand_organic_toggle:$json.brandOrganic,is_aigc:$json.isAigc},source_info:{source:'PULL_FROM_URL',video_url:$json.videoUrl}}) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "ttpub-http",
+        "name": "TikTok Direct Post Init",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          720,
+          440
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{json:{ok:true,type:'tiktok_publish_plan',status:'blocked',publishingBlocked:true,approvalRequired:!$json.approved,creatorConfirmationRequired:!$json.creatorConfirmed,message:'لن يتم النشر قبل الموافقة الصريحة وتأكيد إعدادات المنشور.'}}];"
+        },
+        "id": "ttpub-blocked",
+        "name": "Return TikTok Publish Plan",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          720,
+          600
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "ttpub-r",
+        "name": "Respond TikTok Publish",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          980,
+          520
+        ]
       }
     ],
     "connections": {
@@ -838,6 +1047,101 @@
           [
             {
               "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "TikTok Check Webhook": {
+        "main": [
+          [
+            {
+              "node": "TikTok Creator Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "TikTok Creator Check": {
+        "main": [
+          [
+            {
+              "node": "Normalize TikTok Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize TikTok Check": {
+        "main": [
+          [
+            {
+              "node": "Respond TikTok Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "TikTok Publish Webhook": {
+        "main": [
+          [
+            {
+              "node": "Prepare TikTok Publish",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare TikTok Publish": {
+        "main": [
+          [
+            {
+              "node": "TikTok Approved + Ready?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "TikTok Approved + Ready?": {
+        "main": [
+          [
+            {
+              "node": "TikTok Direct Post Init",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Return TikTok Publish Plan",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "TikTok Direct Post Init": {
+        "main": [
+          [
+            {
+              "node": "Respond TikTok Publish",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Return TikTok Publish Plan": {
+        "main": [
+          [
+            {
+              "node": "Respond TikTok Publish",
               "type": "main",
               "index": 0
             }
