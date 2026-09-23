@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const prompt=String(b.prompt||b.command||\"\").trim(); const hasCreds=Boolean($env.HF_API_KEY_ID && $env.HF_API_KEY_SECRET); return [{json:{ok:true,prompt,approved,hasCreds,approvalRequired:!approved,mode:\"preview_first\",finalRenderBlocked:!approved||!hasCreds,provider:hasCreds?\"HIGGSFIELD_READY\":\"NOT_CONNECTED\"}}];"
+        "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const prompt=String(b.prompt||b.command||\"\").trim(); const hasCreds=Boolean($env.HF_CREDENTIALS); return [{json:{ok:true,prompt,approved,hasCreds,approvalRequired:!approved,mode:\"preview_first\",finalRenderBlocked:!approved||!hasCreds,provider:hasCreds?\"HIGGSFIELD_READY\":\"NOT_CONNECTED\"}}];"
       },
       "id": "plan",
       "name": "Prepare Higgsfield Job",
@@ -70,7 +70,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "={{'Key ' + $env.HF_API_KEY_ID + ':' + $env.HF_API_KEY_SECRET}}"
+              "value": "={{'Key ' + $env.HF_CREDENTIALS}}"
             },
             {
               "name": "Content-Type",
