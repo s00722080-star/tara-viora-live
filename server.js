@@ -340,6 +340,79 @@ app.get("/api/backup",(req,res)=>{
   audit("backup_created",{userId:req.user.id,entityType:"backup",entityId:path.basename(file)});res.download(file,path.basename(file));
 });
 
+
+app.post("/api/carousel/generate",async(req,res)=>{
+  const topic=String(req.body?.topic||req.body?.brief||"").trim();if(!topic)return res.status(400).json({ok:false,error:"topic_required"});
+  const jobId=createJob({type:"carousel",title:`Carousel: ${topic}`,payload:req.body||{},provider:client?"OPENAI":"LOCAL",status:"running"});
+  let slides;
+  try{
+    if(client){
+      const r=await client.responses.create({model,instructions:`أنت Creative Director لـ TARA VIORA. أنشئ JSON فقط بالشكل {"slides":[{"title":"","body":""}],"caption":"","cta":""}. اجعل الكاروسيل 5-7 شرائح، فاخر، علمي، مختصر، ولا تستخدم ادعاءات طبية غير موثقة. Brand context:\n${brandContext()}`,input:topic});
+      slides=safeJson(r.output_text||"{}");
+    }else{
+      slides={slides:[
+        {title:"المشكلة",body:topic},{title:"ما المهم معرفته؟",body:"ركّزي على المكونات والاستخدام المناسب."},
+        {title:"كيف نقيّم المنتج؟",body:"التركيبة، الملاءمة، وطريقة الاستخدام أهم من الوعود."},
+        {title:"TARA VIORA",body:"اختيار هادئ مبني على معرفة أوضح."},
+        {title:"الخطوة التالية",body:"احفظي الكاروسيل وراجعي التفاصيل قبل القرار."}
+      ],caption:`دليل مبسّط: ${topic}`,cta:"احفظي المنشور"};
+    }
+    run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(slides),jobId);
+    res.json({ok:true,jobId,result:slides});
+  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),jobId);res.status(502).json({ok:false,jobId,error:"carousel_failed"});}
+});
+
+app.post("/api/images/prepare",(req,res)=>{
+  const prompt=String(req.body?.prompt||"").trim();if(!prompt)return res.status(400).json({ok:false,error:"prompt_required"});
+  const id=createJob({type:"image_generation",title:`Image: ${prompt.slice(0,90)}`,payload:{...req.body,prompt},provider:"OPENAI_IMAGE",requiresApproval:true,costEstimate:Number(req.body?.costEstimate||0)});
+  audit("image_generation_prepared",{userId:req.user.id,entityType:"job",entityId:id});res.json({ok:true,jobId:id,approvalRequired:true});
+});
+app.post("/api/actions/openai-image",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  if(!client)return res.status(503).json({ok:false,error:"openai_not_connected"});
+  const p=json(job.payload_json),prompt=String(req.body?.prompt||p.prompt||"");
+  try{
+    const r=await client.images.generate({model:process.env.OPENAI_IMAGE_MODEL||"gpt-image-1",prompt,size:req.body?.size||p.size||"1024x1024",response_format:"b64_json"});
+    const b64=r.data?.[0]?.b64_json;if(!b64)throw new Error("image_missing");
+    const buf=Buffer.from(b64,"base64"),out=path.join(renderDir,`image-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`);
+    fs.writeFileSync(out,buf);
+    const ar=run("INSERT INTO assets(name,kind,path,mime,size_bytes,metadata_json) VALUES(?,?,?,?,?,?)",path.basename(out),"generated_image",out,"image/png",buf.length,JSON.stringify({prompt,model:process.env.OPENAI_IMAGE_MODEL||"gpt-image-1"}));
+    const assetId=Number(ar.lastInsertRowid);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({assetId}),job.id);
+    audit("image_generated",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{assetId}});res.json({ok:true,assetId});
+  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+});
+
+app.post("/api/b2b/research",async(req,res)=>{
+  const q=String(req.body?.query||"").trim()||"صيدليات ومراكز تجميل وعيادات وموزعين محتملين في لبنان";
+  const jobId=createJob({type:"b2b_research",title:q,payload:req.body||{},provider:client?"OPENAI_WEB":"NOT_CONNECTED",status:"running"});
+  if(!client){run("UPDATE jobs SET status='blocked',error='Research provider unavailable',updated_at=CURRENT_TIMESTAMP WHERE id=?",jobId);return res.status(503).json({ok:false,jobId,error:"research_provider_unavailable"});}
+  try{
+    const r=await client.responses.create({model,tools:[{type:"web_search"}],instructions:`ابحث فقط في بيانات عامة أو مخوّلة. أعد JSON فقط {"leads":[{"name":"","category":"","area":"","phone":"","email":"","website":"","source_url":"","fit_score":0}]}. لا تختلق أرقام هاتف أو إيميلات؛ اتركها فارغة إن لم تظهر في المصدر. ركّز على لبنان.`,input:q});
+    const result=safeJson(r.output_text||"{}"),leads=Array.isArray(result.leads)?result.leads:[];
+    let inserted=0;
+    for(const x of leads){
+      const score=Math.max(0,Math.min(100,Number(x.fit_score||0))),priority=score>=85?"A":score>=70?"B":score>=55?"C":"D";
+      try{run("INSERT INTO leads(name,category,area,phone,email,website,source_url,fit_score,priority,consent_status) VALUES(?,?,?,?,?,?,?,?,?,'unknown')",
+        String(x.name||"").trim(),x.category||null,x.area||null,x.phone||null,x.email||null,x.website||null,x.source_url||null,score,priority);inserted++;}catch{}
+    }
+    run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({inserted,leads}),jobId);
+    audit("b2b_research_completed",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{inserted}});res.json({ok:true,jobId,inserted,leads});
+  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),jobId);res.status(502).json({ok:false,jobId,error:"b2b_research_failed"});}
+});
+
+function createBackupFile(){
+  const stamp=new Date().toISOString().replace(/[:.]/g,"-"),dir=path.join(DATA_DIR,"backups");fs.mkdirSync(dir,{recursive:true});
+  const file=path.join(dir,`backup-${stamp}.json`);
+  const tables=["settings","users","jobs","approvals","audit_log","assets","leads","content_items","analytics","spend","brand_knowledge","voc_items","campaigns","experiments"];
+  const payload={exportedAt:new Date().toISOString()};
+  for(const t of tables){try{payload[t]=all(`SELECT * FROM ${t}`)}catch{}}
+  fs.writeFileSync(file,JSON.stringify(payload,null,2));
+  const files=fs.readdirSync(dir).filter(x=>x.endsWith(".json")).sort();
+  while(files.length>14){const old=files.shift();try{fs.unlinkSync(path.join(dir,old))}catch{}}
+  return file;
+}
+setInterval(()=>{try{createBackupFile();audit("automatic_backup_created",{entityType:"backup"})}catch{}},24*60*60*1000);
+
 // Integrations live status
 app.get("/api/integrations",async(req,res)=>{
   let hf="NOT_CONNECTED",tt="NOT_CONNECTED";
