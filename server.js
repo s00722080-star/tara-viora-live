@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import OpenAI from "openai";
-import { db, one, all, run, json, audit, setting, DATA_DIR } from "./db.js";
+import { db, dbMode, one, all, run, json, audit, setting, DATA_DIR } from "./db.js";
 
 const app=express();
 app.use(express.json({limit:"5mb",verify:(req,_res,buf)=>{req.rawBody=Buffer.from(buf)}}));
@@ -38,13 +38,13 @@ function authStatus(){return one("SELECT count(*) c FROM users").c>0}
 function currentUser(req){
   const token=parseCookies(req).tv_session; if(!token)return null;
   const h=tokenHash(token);
-  return one(`SELECT u.id,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND datetime(s.expires_at)>datetime('now')`,h)||null;
+  return one(`SELECT u.id,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND expires_at>CURRENT_TIMESTAMP`,h)||null;
 }
 function requireAuth(req,res,next){const u=currentUser(req); if(!u)return res.status(401).json({ok:false,error:"auth_required"}); req.user=u; next();}
 function setSession(res,userId){
   const token=crypto.randomBytes(32).toString("hex"), h=tokenHash(token);
-  run("DELETE FROM sessions WHERE datetime(expires_at)<=datetime('now')");
-  run("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,datetime('now',?))",h,userId,`+${sessionHours} hours`);
+  run("DELETE FROM sessions WHERE expires_at<=CURRENT_TIMESTAMP");
+  const expires=new Date(Date.now()+sessionHours*3600*1000).toISOString();\n  run("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)",h,userId,expires);
   res.setHeader("Set-Cookie",`tv_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${sessionHours*3600}`);
 }
 function routeCommand(q=""){
@@ -115,7 +115,7 @@ app.post("/api/auth/logout",requireAuth,(req,res)=>{
 });
 
 // Health & setup-safe status
-app.get("/health",(_req,res)=>res.json({ok:true,app:"TARA VIORA Command Center",db:"SQLITE_PERSISTENT",dataDir:DATA_DIR}));
+app.get("/health",(_req,res)=>res.json({ok:true,app:"TARA VIORA Command Center",db:dbMode,dataDir:DATA_DIR}));
 app.get("/health/deep",async(_req,res)=>{
   let dbOk=false,volumeOk=false,ffmpegOk=false,n8nOk=false,higgsfield="UNKNOWN";
   try{dbOk=Number(one("SELECT 1 v").v)===1;}catch{}
