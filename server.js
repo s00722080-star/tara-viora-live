@@ -708,7 +708,9 @@ app.post("/api/actions/higgsfield",async(req,res)=>{
 });
 app.post("/api/actions/tiktok",async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));
-  if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  const approval=job?one("SELECT status FROM approvals WHERE job_id=? ORDER BY id DESC LIMIT 1",job.id):null;
+  const approvalValid=Boolean(job&&(job.status==="approved"||approval?.status==="approved"));
+  if(!approvalValid)return res.status(403).json({ok:false,error:"approved_job_required"});
   if(!req.body?.creatorConfirmed)return res.status(400).json({ok:false,error:"creator_confirmation_required"});
   try{
     const token=await tiktokAccessToken();if(!token)return res.status(503).json({ok:false,error:"tiktok_not_connected"});
