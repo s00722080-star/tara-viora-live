@@ -17,6 +17,7 @@ const client=process.env.OPENAI_API_KEY?new OpenAI({apiKey:process.env.OPENAI_AP
 const model=process.env.OPENAI_MODEL||"gpt-5.6-luna";
 const n8nBase=String(process.env.N8N_BASE_URL||"").replace(/\/$/,"");
 const sessionHours=Number(process.env.SESSION_HOURS||168);
+const stagingMode=String(process.env.STAGING_MODE||"false").toLowerCase()==="true";
 
 const uploadDir=path.join(DATA_DIR,"uploads");
 const renderDir=path.join(DATA_DIR,"renders");
@@ -150,6 +151,14 @@ app.post("/api/auth/logout",requireAuth,(req,res)=>{
 
 // Health & setup-safe status
 app.get("/health",(_req,res)=>res.json({ok:true,app:"TARA VIORA Command Center",db:dbMode,dataDir:DATA_DIR}));
+app.get("/health/ready",(_req,res)=>{
+  let dbOk=false,volumeOk=false,ffmpegOk=false;
+  try{dbOk=Number(one("SELECT 1 v").v)===1}catch{}
+  try{const p=path.join(DATA_DIR,".ready");fs.writeFileSync(p,"ok");volumeOk=fs.readFileSync(p,"utf8")==="ok";fs.unlinkSync(p)}catch{}
+  try{ffmpegOk=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0}catch{}
+  const ok=dbOk&&volumeOk&&ffmpegOk;
+  res.status(ok?200:503).json({ok,db:dbOk,volume:volumeOk,ffmpeg:ffmpegOk,mode:stagingMode?"STAGING":"PRODUCTION"});
+});
 app.get("/health/deep",async(_req,res)=>{
   let dbOk=false,volumeOk=false,ffmpegOk=false,n8nOk=false,higgsfield="UNKNOWN";
   try{dbOk=Number(one("SELECT 1 v").v)===1;}catch{}
@@ -804,12 +813,16 @@ app.post("/api/command",async(req,res)=>{
   res.json({ok:true,jobId,command:q,module,moduleName,answer,aiStatus,automationStatus,automationResult,approvalRequired:sensitive});
 });
 
+function blockExternalInStaging(req,res,next){
+  if(stagingMode)return res.status(423).json({ok:false,error:"staging_external_actions_disabled"});
+  next();
+}
 // Safe external-action endpoints. They require an already-approved job.
-app.post("/api/actions/higgsfield",async(req,res)=>{
+app.post("/api/actions/higgsfield",blockExternalInStaging,async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   try{const r=await postN8n("tara-viora-render",{...req.body,approved:true});run("UPDATE jobs SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",r.ok?"submitted":"failed",JSON.stringify(r.data),job.id);audit("higgsfield_submit",{userId:req.user.id,entityType:"job",entityId:job.id});res.status(r.ok?200:502).json({ok:r.ok,result:r.data});}catch(e){res.status(502).json({ok:false,error:String(e.message)});}
 });
-app.post("/api/actions/tiktok",async(req,res)=>{
+app.post("/api/actions/tiktok",blockExternalInStaging,async(req,res)=>{
   const requestedJobId=Number(req.body?.jobId);
   const job=one("SELECT * FROM jobs WHERE id=?",requestedJobId);
   const approval=job?one("SELECT status,decided_at FROM approvals WHERE job_id=? ORDER BY id DESC LIMIT 1",job.id):null;
@@ -1013,17 +1026,17 @@ app.post("/api/actions/elevenlabs",async(req,res)=>{
   }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
 });
 
-app.post("/api/actions/instagram",async(req,res)=>{
+app.post("/api/actions/instagram",blockExternalInStaging,async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   try{const result=await instagramPublish(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("instagram_publish",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{result}});res.json({ok:true,result});}
   catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
 });
-app.post("/api/actions/facebook",async(req,res)=>{
+app.post("/api/actions/facebook",blockExternalInStaging,async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   try{const result=await facebookPublish(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("facebook_publish",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{result}});res.json({ok:true,result});}
   catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
 });
-app.post("/api/actions/whatsapp",async(req,res)=>{
+app.post("/api/actions/whatsapp",blockExternalInStaging,async(req,res)=>{
   const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
   try{const result=await whatsappSend(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("whatsapp_send",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{to:req.body?.to}});res.json({ok:true,result});}
   catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
@@ -1174,8 +1187,8 @@ async function publishingContinuityCycle(){
   return continuityState;
 }
 
-setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
-setInterval(()=>publishingContinuityCycle().catch(()=>{}),5*60*1000);
+if(!stagingMode)setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
+if(!stagingMode)setInterval(()=>publishingContinuityCycle().catch(()=>{}),5*60*1000);
 setTimeout(()=>publishingContinuityCycle().catch(()=>{}),15000);
 
 app.get("/api/continuity/status",requireAuth,async(req,res)=>{try{res.json({ok:true,...await publishingContinuityCycle()})}catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}});
