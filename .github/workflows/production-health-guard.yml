@@ -1,0 +1,63 @@
+name: Production Health Guard
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tara-viora-production-guard
+  cancel-in-progress: false
+
+jobs:
+  verify-production:
+    if: ${{ !contains(github.event.head_commit.message, '[auto-rollback]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for this commit to reach production and verify readiness
+        shell: bash
+        run: |
+          set +e
+          TARGET="${GITHUB_SHA}"
+          URL="https://tara-viora-live-production.up.railway.app/health/ready"
+          BAD=0
+          for i in $(seq 1 36); do
+            BODY=$(curl -sS --max-time 8 "$URL" 2>/dev/null || true)
+            if echo "$BODY" | grep -q "\"commit\":\"$TARGET\""; then
+              if echo "$BODY" | grep -q '"ok":true'; then
+                echo "Production is healthy on $TARGET"
+                exit 0
+              fi
+              BAD=$((BAD+1))
+              if [ "$BAD" -ge 3 ]; then
+                echo "New production commit is unhealthy."
+                break
+              fi
+            fi
+            sleep 10
+          done
+          echo "Production verification failed or timed out."
+          exit 1
+
+      - name: Auto rollback unhealthy production commit
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "TARA VIORA Recovery Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout main
+          git pull --ff-only origin main
+          PARENTS=$(git show -s --format=%P HEAD | wc -w)
+          if [ "$PARENTS" -gt 1 ]; then
+            git revert -m 1 --no-edit HEAD
+          else
+            git revert --no-edit HEAD
+          fi
+          git commit --amend -m "[auto-rollback] Revert unhealthy production deployment ${GITHUB_SHA}"
+          git push origin HEAD:main
