@@ -82,24 +82,35 @@ app.get("/health", (_req, res) => res.json({ ok: true, app: "TARA VIORA Command 
 app.get("/api/integrations", async (_req, res) => {
   let higgsfieldConnected = false;
   let higgsfieldProvider = "NOT_CONNECTED";
+  let tiktokConnected = false;
+  let tiktokProvider = "NOT_CONNECTED";
+
   if (n8nBase) {
     try {
       const hr = await fetch(`${n8nBase}/webhook/tara-viora-higgsfield-check`, {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          command:"TARA VIORA Higgsfield integration status",
-          prompt:"Connectivity check only. Do not render.",
-          approved:false,
-          source:"integrations-status"
-        })
+        body:JSON.stringify({source:"integrations-status"})
       });
       const raw = await hr.text();
       let result; try { result = JSON.parse(raw); } catch { result = {}; }
       higgsfieldProvider = result?.provider || "NOT_CONNECTED";
-      higgsfieldConnected = Boolean(hr.ok && result?.provider === "HIGGSFIELD_READY" && result?.finalRenderBlocked === true);
+      higgsfieldConnected = Boolean(hr.ok && result?.provider === "HIGGSFIELD_READY");
+    } catch {}
+
+    try {
+      const tr = await fetch(`${n8nBase}/webhook/tara-viora-tiktok-check`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({source:"integrations-status"})
+      });
+      const raw = await tr.text();
+      let result; try { result = JSON.parse(raw); } catch { result = {}; }
+      tiktokProvider = result?.provider || "NOT_CONNECTED";
+      tiktokConnected = Boolean(tr.ok && result?.provider === "TIKTOK_READY");
     } catch {}
   }
+
   res.json({
     ok:true,
     providers:{
@@ -113,7 +124,8 @@ app.get("/api/integrations", async (_req, res) => {
       },
       tiktok:{
         label:"TikTok",
-        connected:Boolean(process.env.TIKTOK_ACCESS_TOKEN && process.env.TIKTOK_OPEN_ID)
+        connected:tiktokConnected,
+        status:tiktokProvider
       },
       higgsfield:{
         label:"Higgsfield Video",
@@ -122,6 +134,22 @@ app.get("/api/integrations", async (_req, res) => {
       }
     }
   });
+});
+
+app.get("/api/tiktok-check", async (_req, res) => {
+  if (!n8nBase) return res.status(503).json({ok:false, provider:"NOT_CONNECTED", reason:"n8n_not_connected"});
+  try {
+    const tr = await fetch(`${n8nBase}/webhook/tara-viora-tiktok-check`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({source:"tiktok-preflight"})
+    });
+    const raw = await tr.text();
+    let result; try { result = JSON.parse(raw); } catch { result = {raw}; }
+    res.status(tr.ok ? 200 : 502).json({ok:Boolean(tr.ok && result?.provider==="TIKTOK_READY"), result});
+  } catch (err) {
+    res.status(502).json({ok:false, provider:"UNKNOWN", error:String(err?.message||err)});
+  }
 });
 
 app.get("/api/status", (_req, res) => res.json({
