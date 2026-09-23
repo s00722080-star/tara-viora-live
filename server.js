@@ -44,7 +44,8 @@ function requireAuth(req,res,next){const u=currentUser(req); if(!u)return res.st
 function setSession(res,userId){
   const token=crypto.randomBytes(32).toString("hex"), h=tokenHash(token);
   run("DELETE FROM sessions WHERE expires_at<=CURRENT_TIMESTAMP");
-  const expires=new Date(Date.now()+sessionHours*3600*1000).toISOString();\n  run("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)",h,userId,expires);
+  const expires=new Date(Date.now()+sessionHours*3600*1000).toISOString();
+  run("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)",h,userId,expires);
   res.setHeader("Set-Cookie",`tv_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${sessionHours*3600}`);
 }
 function routeCommand(q=""){
