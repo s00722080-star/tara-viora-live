@@ -246,6 +246,22 @@ app.listen(port, "0.0.0.0", () => {
         });
         const body = await r.text();
         console.log("TARA_VIORA_STARTUP_SELFTEST", r.status, body.slice(0,1000));
+        try {
+          const hr = await fetch(`${n8nBase}/webhook/tara-viora-render`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              command:"TARA VIORA Higgsfield startup preflight",
+              prompt:"Connectivity check only. Do not render.",
+              approved:false,
+              source:"startup-higgsfield-preflight"
+            })
+          });
+          const hbody = await hr.text();
+          console.log("TARA_VIORA_HIGGSFIELD_PREFLIGHT", hr.status, hbody.slice(0,1000));
+        } catch (he) {
+          console.error("TARA_VIORA_HIGGSFIELD_PREFLIGHT_ERROR", he?.message || he);
+        }
       } catch (e) {
         console.error("TARA_VIORA_STARTUP_SELFTEST_ERROR", e?.message || e);
       }
