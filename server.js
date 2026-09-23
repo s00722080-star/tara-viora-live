@@ -298,6 +298,128 @@ app.post("/api/actions/tiktok",async(req,res)=>{
   try{const r=await postN8n("tara-viora-tiktok-publish",{...req.body,approved:true,creatorConfirmed:true});run("UPDATE jobs SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",r.ok?"submitted":"failed",JSON.stringify(r.data),job.id);audit("tiktok_submit",{userId:req.user.id,entityType:"job",entityId:job.id});res.status(r.ok?200:502).json({ok:r.ok,result:r.data});}catch(e){res.status(502).json({ok:false,error:String(e.message)});}
 });
 
+
+const graphVersion=process.env.META_GRAPH_VERSION||"v24.0";
+async function graphPost(pathName,token,payload){
+  const r=await fetch(`https://graph.facebook.com/${graphVersion}/${pathName}`,{
+    method:"POST",headers:{"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  });
+  const raw=await r.text(); const data=safeJson(raw);
+  if(!r.ok)throw new Error(data?.error?.message||`graph_${r.status}`);
+  return data;
+}
+async function instagramPublish(payload){
+  const token=process.env.META_ACCESS_TOKEN, ig=process.env.META_IG_USER_ID;
+  if(!token||!ig)throw new Error("meta_not_connected");
+  const p={caption:String(payload.caption||"")};
+  if(payload.mediaType==="REELS"||payload.videoUrl){p.media_type="REELS";p.video_url=payload.videoUrl;}
+  else p.image_url=payload.imageUrl;
+  const created=await graphPost(`${ig}/media`,token,p);
+  if(!created.id)throw new Error("instagram_container_missing");
+  if(p.media_type==="REELS"){
+    for(let i=0;i<12;i++){
+      await new Promise(r=>setTimeout(r,2500));
+      const sr=await fetch(`https://graph.facebook.com/${graphVersion}/${created.id}?fields=status_code&access_token=${encodeURIComponent(token)}`);
+      const sd=await sr.json().catch(()=>({}));
+      if(sd.status_code==="FINISHED")break;
+      if(sd.status_code==="ERROR")throw new Error("instagram_media_processing_failed");
+    }
+  }
+  return graphPost(`${ig}/media_publish`,token,{creation_id:created.id});
+}
+async function facebookPublish(payload){
+  const token=process.env.META_ACCESS_TOKEN,page=process.env.META_PAGE_ID;
+  if(!token||!page)throw new Error("meta_not_connected");
+  if(payload.imageUrl)return graphPost(`${page}/photos`,token,{url:payload.imageUrl,message:String(payload.message||payload.caption||"")});
+  return graphPost(`${page}/feed`,token,{message:String(payload.message||payload.caption||"")});
+}
+async function whatsappSend(payload){
+  const token=process.env.WHATSAPP_ACCESS_TOKEN,phoneId=process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if(!token||!phoneId)throw new Error("whatsapp_not_connected");
+  const body=payload.templateName?{
+    messaging_product:"whatsapp",to:String(payload.to),type:"template",
+    template:{name:String(payload.templateName),language:{code:String(payload.language||"en_US")},components:payload.components||[]}
+  }:{
+    messaging_product:"whatsapp",recipient_type:"individual",to:String(payload.to),type:"text",
+    text:{preview_url:false,body:String(payload.message||"")}
+  };
+  return graphPost(`${phoneId}/messages`,token,body);
+}
+
+app.post("/api/voiceover/prepare",(req,res)=>{
+  const text=String(req.body?.text||"").trim(),voiceId=String(req.body?.voiceId||"").trim();
+  if(!text||!voiceId)return res.status(400).json({ok:false,error:"text_and_voice_required"});
+  const jobId=createJob({type:"voiceover",title:`Voiceover: ${text.slice(0,80)}`,payload:{text,voiceId,modelId:req.body?.modelId||"eleven_multilingual_v2"},provider:"ELEVENLABS",requiresApproval:true,costEstimate:text.length});
+  audit("voiceover_prepared",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{characters:text.length}});
+  res.json({ok:true,jobId,approvalRequired:true,estimatedCharacters:text.length});
+});
+app.post("/api/actions/elevenlabs",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId)); if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  const key=process.env.ELEVENLABS_API_KEY;if(!key)return res.status(503).json({ok:false,error:"elevenlabs_not_connected"});
+  const p=json(job.payload_json),voiceId=String(req.body?.voiceId||p.voiceId||""),text=String(req.body?.text||p.text||"");
+  try{
+    const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,{
+      method:"POST",headers:{"xi-api-key":key,"Content-Type":"application/json"},
+      body:JSON.stringify({text,model_id:req.body?.modelId||p.modelId||"eleven_multilingual_v2"})
+    });
+    if(!r.ok)throw new Error(`elevenlabs_${r.status}`);
+    const buf=Buffer.from(await r.arrayBuffer()),out=path.join(renderDir,`voice-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.mp3`);
+    fs.writeFileSync(out,buf);
+    const ar=run("INSERT INTO assets(name,kind,path,mime,size_bytes,metadata_json) VALUES(?,?,?,?,?,?)",path.basename(out),"voiceover",out,"audio/mpeg",buf.length,JSON.stringify({voiceId,characters:text.length}));
+    const assetId=Number(ar.lastInsertRowid);
+    run("UPDATE jobs SET status='completed',result_json=?,cost_actual=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify({assetId}),text.length,job.id);
+    run("INSERT INTO spend(provider,category,amount,currency,credits,job_id,note) VALUES('ElevenLabs','voiceover',0,'USD',?,?,?)",text.length,job.id,`${text.length} characters`);
+    audit("voiceover_generated",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{assetId,characters:text.length}});
+    res.json({ok:true,assetId});
+  }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+});
+
+app.post("/api/actions/instagram",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  try{const result=await instagramPublish(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("instagram_publish",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{result}});res.json({ok:true,result});}
+  catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+});
+app.post("/api/actions/facebook",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  try{const result=await facebookPublish(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("facebook_publish",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{result}});res.json({ok:true,result});}
+  catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+});
+app.post("/api/actions/whatsapp",async(req,res)=>{
+  const job=one("SELECT * FROM jobs WHERE id=?",Number(req.body?.jobId));if(!job||job.status!=="approved")return res.status(403).json({ok:false,error:"approved_job_required"});
+  try{const result=await whatsappSend(req.body);run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);audit("whatsapp_send",{userId:req.user.id,entityType:"job",entityId:job.id,metadata:{to:req.body?.to}});res.json({ok:true,result});}
+  catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);res.status(502).json({ok:false,error:String(e.message)});}
+});
+
+app.post("/api/schedule",(req,res)=>{
+  const b=req.body||{},scheduledAt=String(b.scheduledAt||"");
+  if(!scheduledAt||!b.platform)return res.status(400).json({ok:false,error:"platform_and_scheduledAt_required"});
+  const id=createJob({type:"scheduled_publish",title:String(b.title||`Scheduled ${b.platform} publish`),payload:{...b,scheduledAt},provider:String(b.platform).toUpperCase(),requiresApproval:true,costEstimate:Number(b.costEstimate||0)});
+  audit("scheduled_publish_created",{userId:req.user.id,entityType:"job",entityId:id,metadata:{platform:b.platform,scheduledAt}});
+  res.json({ok:true,jobId:id,approvalRequired:true});
+});
+
+async function runScheduledJobs(){
+  const due=all("SELECT * FROM jobs WHERE type='scheduled_publish' AND status='approved' ORDER BY id LIMIT 10");
+  for(const job of due){
+    const p=json(job.payload_json),when=new Date(p.scheduledAt||0);
+    if(!Number.isFinite(when.getTime())||when.getTime()>Date.now())continue;
+    run("UPDATE jobs SET status='running',updated_at=CURRENT_TIMESTAMP WHERE id=?",job.id);
+    try{
+      let result;
+      const platform=String(p.platform||"").toLowerCase();
+      if(platform==="instagram")result=await instagramPublish(p);
+      else if(platform==="facebook")result=await facebookPublish(p);
+      else if(platform==="whatsapp")result=await whatsappSend(p);
+      else if(platform==="tiktok"){const r=await postN8n("tara-viora-tiktok-publish",{...p,approved:true,creatorConfirmed:true});if(!r.ok)throw new Error("tiktok_publish_failed");result=r.data;}
+      else throw new Error("unsupported_platform");
+      run("UPDATE jobs SET status='completed',result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(result),job.id);
+      audit("scheduled_publish_completed",{entityType:"job",entityId:job.id,metadata:{platform}});
+    }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),job.id);audit("scheduled_publish_failed",{entityType:"job",entityId:job.id,metadata:{error:String(e.message)}});}
+  }
+}
+setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
+
 app.use(express.static(path.join(__dirname,"public")));
 app.get("*",(_req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 
