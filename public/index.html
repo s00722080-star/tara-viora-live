@@ -95,8 +95,8 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
       <h2>TikTok</h2>
       <div class="field"><label>Client Key</label><input id="ttClientKey" autocomplete="off"></div>
       <div class="field"><label>Client Secret</label><input id="ttClientSecret" type="password" autocomplete="new-password"></div>
-      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveTikTokDev()">حفظ بيانات Developer</button><button class="btn alt" onclick="connectTikTok()">ربط حساب TikTok</button><button class="btn alt" onclick="checkProvider('tiktok')">فحص</button></div>
-      <div id="ttMsg" class="muted small" style="margin-top:8px"></div><div class="muted small" style="margin-top:6px">الوضع الحالي: ربط حساب TikTok أولًا. النشر المباشر يبقى مقفولًا إلى أن توافق TikTok على صلاحية video.publish.</div>
+      <div class="row" style="margin-top:10px"><button class="btn" onclick="saveTikTokDev()">حفظ بيانات Developer</button><button class="btn alt" onclick="connectTikTok()">ربط حساب TikTok</button><button class="btn alt" onclick="connectTikTokPublish()">تفويض النشر المباشر</button><button class="btn alt" onclick="checkProvider('tiktok')">فحص</button></div>
+      <div id="ttMsg" class="muted small" style="margin-top:8px"></div><div id="ttPublishMsg" class="muted small" style="margin-top:6px">حالة النشر المباشر: بانتظار video.publish.</div>
     </div>
 
     <div class="panel">
@@ -237,10 +237,11 @@ async function addVoc(){const text=vocText.value.trim();if(!text)return;await ap
 async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
 async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
 
-async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div></div>').join("");window.integrationRedirects=d.redirects||{}}
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{}}
 async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
 async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
 async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
+async function connectTikTokPublish(){try{const d=await api("/api/integrations/tiktok/connect-publish");window.location.href=d.authorizeUrl}catch(e){ttPublishMsg.textContent="تعذر تفويض النشر: "+e.message}}
 async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
 async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
 async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
