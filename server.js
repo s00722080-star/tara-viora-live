@@ -9,7 +9,7 @@ import OpenAI from "openai";
 import { db, one, all, run, json, audit, setting, DATA_DIR } from "./db.js";
 
 const app=express();
-app.use(express.json({limit:"5mb"}));
+app.use(express.json({limit:"5mb",verify:(req,_res,buf)=>{req.rawBody=Buffer.from(buf)}}));
 app.use(express.urlencoded({extended:true}));
 const __filename=fileURLToPath(import.meta.url), __dirname=path.dirname(__filename);
 const port=process.env.PORT||3000;
@@ -139,7 +139,7 @@ app.post("/webhooks/meta",(req,res)=>{
     const secret=process.env.META_APP_SECRET;
     if(secret){
       const sig=String(req.headers["x-hub-signature-256"]||"");
-      const expected="sha256="+crypto.createHmac("sha256",secret).update(JSON.stringify(req.body||{})).digest("hex");
+      const expected="sha256="+crypto.createHmac("sha256",secret).update(req.rawBody||Buffer.from(JSON.stringify(req.body||{}))).digest("hex");
       if(sig && sig!==expected)return res.sendStatus(403);
     }
     const entries=Array.isArray(req.body?.entry)?req.body.entry:[];
