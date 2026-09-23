@@ -311,6 +311,17 @@ app.listen(port, "0.0.0.0", () => {
         } catch (he) {
           console.error("TARA_VIORA_HIGGSFIELD_PREFLIGHT_ERROR", he?.message || he);
         }
+        try {
+          const tr = await fetch(`${n8nBase}/webhook/tara-viora-tiktok-check`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({source:"startup-tiktok-preflight"})
+          });
+          const tbody = await tr.text();
+          console.log("TARA_VIORA_TIKTOK_PREFLIGHT", tr.status, tbody.slice(0,1000));
+        } catch (te) {
+          console.error("TARA_VIORA_TIKTOK_PREFLIGHT_ERROR", te?.message || te);
+        }
       } catch (e) {
         console.error("TARA_VIORA_STARTUP_SELFTEST_ERROR", e?.message || e);
       }
