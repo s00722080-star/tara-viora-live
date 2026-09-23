@@ -241,7 +241,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const prompt=String(b.prompt||b.command||\"\").trim(); const hasCreds=Boolean($env.HF_API_KEY_ID && $env.HF_API_KEY_SECRET); return [{json:{ok:true,prompt,approved,hasCreds,approvalRequired:!approved,mode:\"preview_first\",finalRenderBlocked:!approved||!hasCreds,provider:hasCreds?\"HIGGSFIELD_READY\":\"NOT_CONNECTED\"}}];"
+          "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const prompt=String(b.prompt||b.command||\"\").trim(); const hasCreds=Boolean($env.HF_CREDENTIALS); return [{json:{ok:true,prompt,approved,hasCreds,approvalRequired:!approved,mode:\"preview_first\",finalRenderBlocked:!approved||!hasCreds,provider:hasCreds?\"HIGGSFIELD_READY\":\"NOT_CONNECTED\"}}];"
         },
         "id": "plan",
         "name": "Prepare Higgsfield Job",
@@ -291,7 +291,7 @@
             "parameters": [
               {
                 "name": "Authorization",
-                "value": "={{'Key ' + $env.HF_API_KEY_ID + ':' + $env.HF_API_KEY_SECRET}}"
+                "value": "={{'Key ' + $env.HF_CREDENTIALS}}"
               },
               {
                 "name": "Content-Type",
@@ -346,6 +346,85 @@
         "position": [
           980,
           0
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "tara-viora-higgsfield-check",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "hfcheck-webhook",
+        "name": "Higgsfield Check Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          260
+        ],
+        "webhookId": "33333333-cccc-4333-8333-333333333334"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://api.higgsfield.ai/marketing-studio/image/presets?size=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{'Key ' + $env.HF_CREDENTIALS}}"
+              },
+              {
+                "name": "Accept",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hfcheck-http",
+        "name": "Higgsfield Credential Check",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          250,
+          260
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const j=$json||{}; const ok=Array.isArray(j.items)||typeof j.total==='number'; return [{json:{ok,provider:ok?'HIGGSFIELD_READY':'HIGGSFIELD_AUTH_FAILED',paidRenderTriggered:false,check:'credential_catalog'}}];"
+        },
+        "id": "hfcheck-code",
+        "name": "Normalize Higgsfield Check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          260
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{$json}}",
+          "options": {}
+        },
+        "id": "hfcheck-respond",
+        "name": "Respond Higgsfield Check",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.4,
+        "position": [
+          750,
+          260
         ]
       }
     ],
@@ -406,6 +485,39 @@
           [
             {
               "node": "Respond",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Higgsfield Check Webhook": {
+        "main": [
+          [
+            {
+              "node": "Higgsfield Credential Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Higgsfield Credential Check": {
+        "main": [
+          [
+            {
+              "node": "Normalize Higgsfield Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Higgsfield Check": {
+        "main": [
+          [
+            {
+              "node": "Respond Higgsfield Check",
               "type": "main",
               "index": 0
             }
