@@ -200,7 +200,7 @@ function maybeReturning(sql){
   const m=sql.trim().match(/^INSERT\s+INTO\s+([a-zA-Z0-9_]+)/i);
   if(!m||/\bRETURNING\b/i.test(sql))return sql;
   const table=m[1].toLowerCase();
-  if(["settings","sessions"].includes(table))return sql;
+  if(["settings","sessions","integration_secrets"].includes(table))return sql;
   return sql.replace(/;?\s*$/," RETURNING id");
 }
 function writeResult(sab,payload){
