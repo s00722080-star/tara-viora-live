@@ -20,15 +20,96 @@
     },
     {
       "parameters": {
-        "jsCode": "const b=$json.body||$json; return [{json:{ok:true,type:\"real_video_plan\",status:\"preview_plan\",hook:\"1–2 sec hook\",steps:[\"select best shots\",\"cinematic pacing\",\"premium color\",\"clean type/subtitles\",\"sound design\",\"preview\"],finalRenderBlocked:true,approvalRequired:true,externalRenderer:\"NOT_CONNECTED\"}}];"
+        "jsCode": "const b=$json.body||$json; const approved=Boolean(b.approved); const prompt=String(b.prompt||b.command||\"\").trim(); const hasCreds=Boolean($env.HF_API_KEY_ID && $env.HF_API_KEY_SECRET); return [{json:{ok:true,prompt,approved,hasCreds,approvalRequired:!approved,mode:\"preview_first\",finalRenderBlocked:!approved||!hasCreds,provider:hasCreds?\"HIGGSFIELD_READY\":\"NOT_CONNECTED\"}}];"
       },
-      "id": "p",
-      "name": "Build Video Plan",
+      "id": "plan",
+      "name": "Prepare Higgsfield Job",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        230,
+        220,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json.approved && $json.hasCreds}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if",
+      "name": "Approved + Connected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        470,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.higgsfield.ai/kling-video/v3.0/std/text-to-video",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Key ' + $env.HF_API_KEY_ID + ':' + $env.HF_API_KEY_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({prompt:$json.prompt,duration:5,aspect_ratio:'9:16',sound:'on',multi_shots:false,cfg_scale:0.5}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "hf",
+      "name": "Higgsfield Generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{ok:true,type:\"real_video_plan\",status:\"preview_plan\",provider:$json.provider||\"NOT_CONNECTED\",finalRenderBlocked:true,approvalRequired:true,message:\"تم إعداد خطة الفيديو. لا يتم إنشاء Final Render قبل الموافقة وربط Higgsfield.\"}}];"
+      },
+      "id": "blocked",
+      "name": "Return Preview Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        100
       ]
     },
     {
@@ -42,7 +123,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [
-        480,
+        980,
         0
       ]
     }
@@ -52,14 +133,54 @@
       "main": [
         [
           {
-            "node": "Build Video Plan",
+            "node": "Prepare Higgsfield Job",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Video Plan": {
+    "Prepare Higgsfield Job": {
+      "main": [
+        [
+          {
+            "node": "Approved + Connected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved + Connected?": {
+      "main": [
+        [
+          {
+            "node": "Higgsfield Generate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Preview Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Higgsfield Generate": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Preview Plan": {
       "main": [
         [
           {
