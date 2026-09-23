@@ -243,6 +243,103 @@ app.post("/api/research",async(req,res)=>{
   }catch(e){run("UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",String(e.message),jobId);res.status(502).json({ok:false,jobId,error:"research_failed"});}
 });
 
+
+app.get("/api/content",(req,res)=>res.json({ok:true,items:all("SELECT * FROM content_items ORDER BY id DESC LIMIT 300")}));
+app.post("/api/content",(req,res)=>{
+  const b=req.body||{};
+  const r=run("INSERT INTO content_items(title,platform,format,objective,hook,body,caption,cta,status,asset_id,scheduled_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+    String(b.title||"Untitled"),b.platform||null,b.format||null,b.objective||null,b.hook||null,b.body||null,b.caption||null,b.cta||null,b.status||"draft",b.asset_id||null,b.scheduled_at||null);
+  const id=Number(r.lastInsertRowid);audit("content_created",{userId:req.user.id,entityType:"content",entityId:id});res.json({ok:true,id});
+});
+app.post("/api/content/:id/status",(req,res)=>{
+  const id=Number(req.params.id),status=String(req.body?.status||"draft");
+  run("UPDATE content_items SET status=? WHERE id=?",status,id);audit("content_status_changed",{userId:req.user.id,entityType:"content",entityId:id,metadata:{status}});res.json({ok:true});
+});
+
+app.post("/api/analytics/ingest",(req,res)=>{
+  const rows=Array.isArray(req.body?.items)?req.body.items:[req.body];
+  let count=0;
+  for(const x of rows){
+    if(!x?.platform||!x?.metric||!Number.isFinite(Number(x?.value)))continue;
+    run("INSERT INTO analytics(platform,content_id,metric,value,measured_at,raw_json) VALUES(?,?,?,?,?,?)",
+      String(x.platform),x.content_id||null,String(x.metric),Number(x.value),x.measured_at||new Date().toISOString(),JSON.stringify(x.raw||{}));count++;
+  }
+  audit("analytics_ingested",{userId:req.user.id,entityType:"analytics",metadata:{count}});res.json({ok:true,count});
+});
+app.get("/api/analytics/summary",(req,res)=>{
+  const byMetric=all("SELECT platform,metric,round(sum(value),2) total,count(*) samples FROM analytics GROUP BY platform,metric ORDER BY platform,metric");
+  const recent=all("SELECT * FROM analytics ORDER BY id DESC LIMIT 100");
+  res.json({ok:true,byMetric,recent});
+});
+app.get("/api/analytics/best-time",(req,res)=>{
+  const rows=all(`
+    SELECT c.platform,
+           cast(strftime('%w',coalesce(c.published_at,c.scheduled_at)) as integer) weekday,
+           cast(strftime('%H',coalesce(c.published_at,c.scheduled_at)) as integer) hour,
+           round(avg(a.value),2) score,
+           count(*) samples
+    FROM content_items c JOIN analytics a ON a.content_id=c.id
+    WHERE a.metric IN ('engagement','engagement_rate','clicks','conversions')
+      AND coalesce(c.published_at,c.scheduled_at) IS NOT NULL
+    GROUP BY c.platform,weekday,hour
+    HAVING count(*)>=1
+    ORDER BY score DESC LIMIT 30
+  `);
+  res.json({ok:true,items:rows});
+});
+
+app.get("/api/voc",(req,res)=>res.json({ok:true,items:all("SELECT * FROM voc_items ORDER BY id DESC LIMIT 300")}));
+app.post("/api/voc/ingest",async(req,res)=>{
+  const items=Array.isArray(req.body?.items)?req.body.items:[req.body];let added=0;
+  for(const x of items){
+    const text=String(x?.text||"").trim();if(!text)continue;
+    let category="other",sentiment="neutral",intent="unknown",contentIdea="";
+    if(/سعر|غالي|price|cost/i.test(text))category="price";
+    else if(/نتيجة|result|فعّال|يفيد/i.test(text))category="results";
+    else if(/كيف|استخدام|use/i.test(text))category="usage";
+    else if(/آمن|حساسية|safety|allergy/i.test(text))category="safety";
+    if(/ممتاز|حبيت|love|great|رائع/i.test(text))sentiment="positive";
+    if(/سيء|ما عجب|bad|مشكل/i.test(text))sentiment="negative";
+    contentIdea=category==="price"?"اشرح القيمة مقابل السعر":category==="usage"?"فيديو طريقة الاستخدام":category==="safety"?"محتوى توعوي عن الاستخدام الآمن":"حوّل السؤال إلى FAQ";
+    try{run("INSERT INTO voc_items(platform,source_url,external_id,text,category,sentiment,intent,content_idea) VALUES(?,?,?,?,?,?,?,?)",
+      x.platform||null,x.source_url||null,x.external_id||null,text,category,sentiment,intent,contentIdea);added++;}catch{}
+  }
+  audit("voc_ingested",{userId:req.user.id,entityType:"voc",metadata:{added}});res.json({ok:true,added});
+});
+
+app.get("/api/campaigns",(req,res)=>res.json({ok:true,items:all("SELECT * FROM campaigns ORDER BY id DESC")}));
+app.post("/api/campaigns",(req,res)=>{
+  const b=req.body||{},budget=Number(b.budget||0);
+  const r=run("INSERT INTO campaigns(name,platform,objective,audience_json,budget,status) VALUES(?,?,?,?,?,'draft')",
+    String(b.name||"Campaign"),b.platform||null,b.objective||null,JSON.stringify(b.audience||{}),budget);
+  const id=Number(r.lastInsertRowid);
+  const jobId=createJob({type:"paid_campaign",title:`Launch campaign: ${b.name||"Campaign"}`,payload:{campaignId:id,...b},provider:String(b.platform||"META").toUpperCase(),requiresApproval:true,costEstimate:budget});
+  audit("campaign_draft_created",{userId:req.user.id,entityType:"campaign",entityId:id,metadata:{jobId,budget}});
+  res.json({ok:true,id,jobId,approvalRequired:true});
+});
+
+app.get("/api/budget",(req,res)=>{
+  const monthly=Number(setting("monthly_budget_usd")||500);
+  const spent=Number(one("SELECT coalesce(sum(amount),0) v FROM spend WHERE strftime('%Y-%m',created_at)=strftime('%Y-%m','now')").v||0);
+  res.json({ok:true,monthly,spent,remaining:Math.max(0,monthly-spent)});
+});
+app.post("/api/budget",(req,res)=>{
+  const amount=Math.max(0,Number(req.body?.monthly||0));setting("monthly_budget_usd",amount);audit("budget_updated",{userId:req.user.id,entityType:"settings",entityId:"monthly_budget_usd",metadata:{amount}});res.json({ok:true,monthly:amount});
+});
+
+app.get("/api/backup",(req,res)=>{
+  const stamp=new Date().toISOString().replace(/[:.]/g,"-"),file=path.join(DATA_DIR,`backup-${stamp}.json`);
+  const payload={
+    exportedAt:new Date().toISOString(),
+    brand:all("SELECT * FROM brand_knowledge"),jobs:all("SELECT * FROM jobs"),approvals:all("SELECT * FROM approvals"),
+    assets:all("SELECT id,name,kind,mime,size_bytes,public,source_asset_id,metadata_json,created_at FROM assets"),
+    leads:all("SELECT * FROM leads"),content:all("SELECT * FROM content_items"),analytics:all("SELECT * FROM analytics"),
+    spend:all("SELECT * FROM spend"),voc:all("SELECT * FROM voc_items"),campaigns:all("SELECT * FROM campaigns"),audit:all("SELECT * FROM audit_log")
+  };
+  fs.writeFileSync(file,JSON.stringify(payload,null,2));
+  audit("backup_created",{userId:req.user.id,entityType:"backup",entityId:path.basename(file)});res.download(file,path.basename(file));
+});
+
 // Integrations live status
 app.get("/api/integrations",async(req,res)=>{
   let hf="NOT_CONNECTED",tt="NOT_CONNECTED";
