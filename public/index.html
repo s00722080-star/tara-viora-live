@@ -208,6 +208,22 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
     <div id="customerDataSummary" class="list"></div>
   </div>
 
+  <div class="grid cols section">
+    <div class="panel">
+      <div class="toolbar"><div><h3>Profitability Bot</h3><div class="muted small">يفصل المشاهدات عن الربح الحقيقي: Spend / Revenue / ROAS / CPA / CPL.</div></div></div>
+      <div id="profitabilityList" class="list"></div>
+    </div>
+    <div class="panel">
+      <div class="toolbar"><div><h3>Attribution Bot</h3><div class="muted small">يتتبع أي مصدر أو محتوى أو حملة أنتجت Lead أو Sale فعليًا.</div></div></div>
+      <div id="attributionList" class="list"></div>
+    </div>
+  </div>
+
+  <div class="panel section">
+    <div class="toolbar"><div><h3>Smart Advertising Bot</h3><div class="muted small">ينشئ خطة اختبار متعددة Creatives بدون إطلاق أو صرف تلقائي.</div></div><button class="btn alt" onclick="createSmartAdPlan()">إنشاء خطة اختبار</button></div>
+    <div id="smartAdOut" class="list"></div>
+  </div>
+
   <div class="panel section">
     <h3>مسار التعلم المستمر</h3>
     <div class="item">Customer Data → Performance Signals → Winning Patterns → Content Optimizer → Smart Ads → Budget Optimizer → Attribution → Learning</div>
@@ -264,7 +280,16 @@ const MODULES=[
 ["Analytics","Metrics → insight → next action"],
 ["Budget / Credits","Track cost per job/provider"],
 ["Approvals","Approve/reject sensitive actions"],
-["WhatsApp","Draft → approval → send"]
+["WhatsApp","Draft → approval → send"],
+["Meta Growth Watcher","Official updates → impact → action"],
+["Viral Signal Analyzer","Retention / shares / saves → learning"],
+["Winning Patterns","Evidence → reusable patterns"],
+["Smart Advertising","Small tests → compare → scale proposal"],
+["Smart Budget Allocator","Reduce waste → protect budget → approval"],
+["Profitability","Spend → revenue → profit / ROAS"],
+["Attribution","Source → lead → sale"],
+["Customer Data Intelligence","Authorized events → segmentation"],
+["Early Warning","Detect risk before publishing stops"]
 ];
 let authMode="setup";
 
@@ -312,9 +337,10 @@ async function loadAnalytics(){const [a,b,v]=await Promise.all([api("/api/analyt
 async function addVoc(){const text=vocText.value.trim();if(!text)return;await api("/api/voc/ingest",{method:"POST",body:JSON.stringify({text,platform:vocPlatform.value})});vocText.value="";await loadAnalytics()}
 async function loadGrowth(){
   try{
-    const [x,p,b,c,m,a]=await Promise.all([
+    const [x,p,b,c,m,a,pr,at]=await Promise.all([
       api("/api/growth/executive"),api("/api/growth/winning-patterns"),api("/api/budget/recommendations"),
-      api("/api/customer-data/summary"),api("/api/meta-watcher/status"),api("/api/alerts")
+      api("/api/customer-data/summary"),api("/api/meta-watcher/status"),api("/api/alerts"),
+      api("/api/growth/profitability"),api("/api/growth/attribution")
     ]);
     gxEvents.textContent=x.customer?.events||0;gxPeople.textContent=x.customer?.people||0;
     gxPatterns.textContent=(p.items||[]).length;gxBudget.textContent=(b.items||[]).filter(r=>["proposed","waiting_approval"].includes(r.status)).length;
@@ -324,6 +350,103 @@ async function loadGrowth(){
     customerDataSummary.innerHTML=(c.byEvent||[]).length?(c.byEvent||[]).map(r=>'<div class="item"><b>'+esc(r.source)+' • '+esc(r.event_type)+'</b><div class="muted small">Events '+r.count+' • Value '+Number(r.total_value||0).toFixed(2)+'</div></div>').join(""):'<div class="muted">لا Customer Events بعد. ستبدأ بالامتلاء بعد ربط Meta/WhatsApp/الموقع والحملات.</div>';
     growthAlerts.innerHTML=(a.alerts||[]).length?(a.alerts||[]).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.title)+'</b><span class="status '+(r.severity==="critical"?"bad":"wait")+'">'+esc(r.severity)+'</span></div><div class="muted small">'+esc(r.details||"")+'</div></div>').join(""):'<div class="muted">لا إنذارات مبكرة حاليًا.</div>';
     const mu=m.items||[];metaWatcherOut.innerHTML=(m.summary?'<div class="item" style="white-space:pre-wrap">'+esc(m.summary)+'</div>':"")+(mu.length?mu.slice(0,5).map(r=>'<div class="item"><b>'+esc(r.title)+'</b><div class="muted small">'+esc(r.created_at||"")+'</div></div>').join(""):'<div class="muted">لم يتم تشغيل Meta Watcher بعد.</div>');
+    profitabilityList.innerHTML=(pr.items||[]).length?(pr.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.name||("Campaign #"+r.campaignId))+'</b><span class="status '+(Number(r.profit||0)>0?"ok":Number(r.spend||0)>0?"bad":"wait")+'">'+(r.roas==null?"NO DATA":("ROAS "+Number(r.roas).toFixed(2)))+'</span></div><div>Spend   }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+}
+async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
+async function runBudgetOptimizer(){try{const d=await api("/api/budget/optimizer/run",{method:"POST",body:"{}"});alert("تم إنشاء "+d.created+" توصية جديدة بدون تنفيذ أي صرف.");await loadGrowth()}catch(e){alert("تعذر تحليل الميزانية: "+e.message)}}
+async function prepareBudgetRec(id){try{const d=await api("/api/budget/recommendations/"+id+"/prepare",{method:"POST",body:"{}"});alert("تم إرسال التوصية للموافقة. Job #"+d.jobId);await Promise.all([loadGrowth(),loadApprovals(),refreshDashboard()])}catch(e){alert("تعذر إرسال التوصية: "+e.message)}}
+async function runMetaWatcher(){metaWatcherOut.innerHTML='<div class="item">جاري البحث في مصادر Meta الرسمية...</div>';try{const d=await api("/api/meta-watcher/run",{method:"POST",body:"{}"});await loadGrowth()}catch(e){metaWatcherOut.innerHTML='<div class="item bad">تعذر الفحص: '+esc(e.message)+'</div>'}}
+async function createSmartAdPlan(){
+  const product=prompt("اسم المنتج أو العرض؟")||"TARA VIORA product";
+  const platform=(prompt("المنصة: meta أو tiktok؟","meta")||"meta").toLowerCase();
+  const objective=prompt("الهدف: conversions / leads / traffic؟","conversions")||"conversions";
+  smartAdOut.innerHTML='<div class="item">جاري إعداد خطة الاختبار...</div>';
+  try{
+    const d=await api("/api/smart-ads/plan",{method:"POST",body:JSON.stringify({product,platform,objective})});
+    const p=d.plan||{};
+    smartAdOut.innerHTML='<div class="item"><b>'+esc(p.product||product)+' • '+esc(p.platform||platform)+'</b><div class="muted small">'+esc(p.testingBudgetRule||"")+'</div></div>'+((p.variants||[]).map(v=>'<div class="item"><b>'+esc(v.name)+' — '+esc(v.focus)+'</b><div>'+esc(v.creative)+' • '+esc(v.cta)+'</div></div>').join(""));
+  }catch(e){smartAdOut.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+}
+
+
+async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
+async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
+
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{}}
+async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
+async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
+async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
+async function connectTikTokPublish(){try{const d=await api("/api/integrations/tiktok/connect-publish");window.location.href=d.authorizeUrl}catch(e){ttPublishMsg.textContent="تعذر تفويض النشر: "+e.message}}
+async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
+async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
+async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
+async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
+async function loadMaintenance(){try{const d=await api("/api/maintenance/status");maintStatus.textContent=d.status||"IDLE";maintStatus.className="status "+(d.status==="HEALTHY"?"ok":d.status==="CRITICAL"?"bad":"wait");const checks=d.checks||{};maintChecks.innerHTML=Object.entries(checks).map(([k,v])=>'<div class="card"><div class="muted small">'+esc(k)+'</div><div style="margin-top:6px"><span class="status '+(v==="READY"||v==="CONNECTED"?"ok":v==="ERROR"||v==="REAUTH_REQUIRED"?"bad":"wait")+'">'+esc(v)+'</span></div></div>').join("");maintRepairs.innerHTML=(d.repairs||[]).length?(d.repairs||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا إصلاحات مطلوبة حاليًا.</div>';maintErrors.innerHTML=(d.errors||[]).length?(d.errors||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا أعطال تحتاج تدخّل.</div>'}catch(e){maintStatus.textContent="ERROR";maintStatus.className="status bad";maintErrors.innerHTML='<div class="item">'+esc(e.message)+'</div>'}try{await loadContinuity()}catch{}}
+async function loadContinuity(){const d=await api("/api/continuity/status");contStatus.textContent=d.status||"IDLE";cont24.textContent=d.upcoming24h||0;cont7.textContent=d.upcoming7d||0;contRecovery.textContent=d.recoveryQueue||0;contHuman.textContent=d.humanActionRequired||0;contIssues.innerHTML=(d.issues||[]).length?(d.issues||[]).map(x=>'<div class="item"><b>Job #'+esc(x.jobId)+'</b><div class="muted small">'+esc(x.type)+'</div></div>').join(""):'<div class="muted">لا مشاكل متوقعة في منشورات الـ24 ساعة القادمة.</div>'}
+async function runContinuity(){try{const d=await api("/api/continuity/run",{method:"POST",body:"{}"});await loadContinuity();alert("تم فحص طابور النشر ومحاولة التعافي من الأعطال المؤقتة.")}catch(e){alert("تعذر فحص الاستمرارية: "+e.message)}}
+async function runMaintenance(){maintStatus.textContent="RUNNING";maintStatus.className="status wait";try{await api("/api/maintenance/run",{method:"POST",body:"{}"});await loadMaintenance();alert("انتهى فحص الصيانة والإصلاح الذاتي.")}catch(e){alert("تعذر تشغيل الصيانة: "+e.message);await loadMaintenance()}}
+async function loadAudit(){const d=await api("/api/audit");auditList.innerHTML=d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.event)+'</b><span class="muted small">'+x.created_at+'</span></div><div class="muted small">'+esc(x.entity_type||"")+' '+esc(x.entity_id||"")+'</div></div>').join("")}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+boot();
+</script>
+</body></html>+Number(r.spend||0).toFixed(2)+' • Revenue   }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+}
+async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
+async function runBudgetOptimizer(){try{const d=await api("/api/budget/optimizer/run",{method:"POST",body:"{}"});alert("تم إنشاء "+d.created+" توصية جديدة بدون تنفيذ أي صرف.");await loadGrowth()}catch(e){alert("تعذر تحليل الميزانية: "+e.message)}}
+async function prepareBudgetRec(id){try{const d=await api("/api/budget/recommendations/"+id+"/prepare",{method:"POST",body:"{}"});alert("تم إرسال التوصية للموافقة. Job #"+d.jobId);await Promise.all([loadGrowth(),loadApprovals(),refreshDashboard()])}catch(e){alert("تعذر إرسال التوصية: "+e.message)}}
+async function runMetaWatcher(){metaWatcherOut.innerHTML='<div class="item">جاري البحث في مصادر Meta الرسمية...</div>';try{const d=await api("/api/meta-watcher/run",{method:"POST",body:"{}"});await loadGrowth()}catch(e){metaWatcherOut.innerHTML='<div class="item bad">تعذر الفحص: '+esc(e.message)+'</div>'}}
+
+
+async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
+async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
+
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{}}
+async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
+async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
+async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
+async function connectTikTokPublish(){try{const d=await api("/api/integrations/tiktok/connect-publish");window.location.href=d.authorizeUrl}catch(e){ttPublishMsg.textContent="تعذر تفويض النشر: "+e.message}}
+async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
+async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
+async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
+async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
+async function loadMaintenance(){try{const d=await api("/api/maintenance/status");maintStatus.textContent=d.status||"IDLE";maintStatus.className="status "+(d.status==="HEALTHY"?"ok":d.status==="CRITICAL"?"bad":"wait");const checks=d.checks||{};maintChecks.innerHTML=Object.entries(checks).map(([k,v])=>'<div class="card"><div class="muted small">'+esc(k)+'</div><div style="margin-top:6px"><span class="status '+(v==="READY"||v==="CONNECTED"?"ok":v==="ERROR"||v==="REAUTH_REQUIRED"?"bad":"wait")+'">'+esc(v)+'</span></div></div>').join("");maintRepairs.innerHTML=(d.repairs||[]).length?(d.repairs||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا إصلاحات مطلوبة حاليًا.</div>';maintErrors.innerHTML=(d.errors||[]).length?(d.errors||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا أعطال تحتاج تدخّل.</div>'}catch(e){maintStatus.textContent="ERROR";maintStatus.className="status bad";maintErrors.innerHTML='<div class="item">'+esc(e.message)+'</div>'}try{await loadContinuity()}catch{}}
+async function loadContinuity(){const d=await api("/api/continuity/status");contStatus.textContent=d.status||"IDLE";cont24.textContent=d.upcoming24h||0;cont7.textContent=d.upcoming7d||0;contRecovery.textContent=d.recoveryQueue||0;contHuman.textContent=d.humanActionRequired||0;contIssues.innerHTML=(d.issues||[]).length?(d.issues||[]).map(x=>'<div class="item"><b>Job #'+esc(x.jobId)+'</b><div class="muted small">'+esc(x.type)+'</div></div>').join(""):'<div class="muted">لا مشاكل متوقعة في منشورات الـ24 ساعة القادمة.</div>'}
+async function runContinuity(){try{const d=await api("/api/continuity/run",{method:"POST",body:"{}"});await loadContinuity();alert("تم فحص طابور النشر ومحاولة التعافي من الأعطال المؤقتة.")}catch(e){alert("تعذر فحص الاستمرارية: "+e.message)}}
+async function runMaintenance(){maintStatus.textContent="RUNNING";maintStatus.className="status wait";try{await api("/api/maintenance/run",{method:"POST",body:"{}"});await loadMaintenance();alert("انتهى فحص الصيانة والإصلاح الذاتي.")}catch(e){alert("تعذر تشغيل الصيانة: "+e.message);await loadMaintenance()}}
+async function loadAudit(){const d=await api("/api/audit");auditList.innerHTML=d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.event)+'</b><span class="muted small">'+x.created_at+'</span></div><div class="muted small">'+esc(x.entity_type||"")+' '+esc(x.entity_id||"")+'</div></div>').join("")}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+boot();
+</script>
+</body></html>+Number(r.revenue||0).toFixed(2)+' • Profit   }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+}
+async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
+async function runBudgetOptimizer(){try{const d=await api("/api/budget/optimizer/run",{method:"POST",body:"{}"});alert("تم إنشاء "+d.created+" توصية جديدة بدون تنفيذ أي صرف.");await loadGrowth()}catch(e){alert("تعذر تحليل الميزانية: "+e.message)}}
+async function prepareBudgetRec(id){try{const d=await api("/api/budget/recommendations/"+id+"/prepare",{method:"POST",body:"{}"});alert("تم إرسال التوصية للموافقة. Job #"+d.jobId);await Promise.all([loadGrowth(),loadApprovals(),refreshDashboard()])}catch(e){alert("تعذر إرسال التوصية: "+e.message)}}
+async function runMetaWatcher(){metaWatcherOut.innerHTML='<div class="item">جاري البحث في مصادر Meta الرسمية...</div>';try{const d=await api("/api/meta-watcher/run",{method:"POST",body:"{}"});await loadGrowth()}catch(e){metaWatcherOut.innerHTML='<div class="item bad">تعذر الفحص: '+esc(e.message)+'</div>'}}
+
+
+async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
+async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
+
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{}}
+async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
+async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
+async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
+async function connectTikTokPublish(){try{const d=await api("/api/integrations/tiktok/connect-publish");window.location.href=d.authorizeUrl}catch(e){ttPublishMsg.textContent="تعذر تفويض النشر: "+e.message}}
+async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
+async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
+async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
+async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
+async function loadMaintenance(){try{const d=await api("/api/maintenance/status");maintStatus.textContent=d.status||"IDLE";maintStatus.className="status "+(d.status==="HEALTHY"?"ok":d.status==="CRITICAL"?"bad":"wait");const checks=d.checks||{};maintChecks.innerHTML=Object.entries(checks).map(([k,v])=>'<div class="card"><div class="muted small">'+esc(k)+'</div><div style="margin-top:6px"><span class="status '+(v==="READY"||v==="CONNECTED"?"ok":v==="ERROR"||v==="REAUTH_REQUIRED"?"bad":"wait")+'">'+esc(v)+'</span></div></div>').join("");maintRepairs.innerHTML=(d.repairs||[]).length?(d.repairs||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا إصلاحات مطلوبة حاليًا.</div>';maintErrors.innerHTML=(d.errors||[]).length?(d.errors||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا أعطال تحتاج تدخّل.</div>'}catch(e){maintStatus.textContent="ERROR";maintStatus.className="status bad";maintErrors.innerHTML='<div class="item">'+esc(e.message)+'</div>'}try{await loadContinuity()}catch{}}
+async function loadContinuity(){const d=await api("/api/continuity/status");contStatus.textContent=d.status||"IDLE";cont24.textContent=d.upcoming24h||0;cont7.textContent=d.upcoming7d||0;contRecovery.textContent=d.recoveryQueue||0;contHuman.textContent=d.humanActionRequired||0;contIssues.innerHTML=(d.issues||[]).length?(d.issues||[]).map(x=>'<div class="item"><b>Job #'+esc(x.jobId)+'</b><div class="muted small">'+esc(x.type)+'</div></div>').join(""):'<div class="muted">لا مشاكل متوقعة في منشورات الـ24 ساعة القادمة.</div>'}
+async function runContinuity(){try{const d=await api("/api/continuity/run",{method:"POST",body:"{}"});await loadContinuity();alert("تم فحص طابور النشر ومحاولة التعافي من الأعطال المؤقتة.")}catch(e){alert("تعذر فحص الاستمرارية: "+e.message)}}
+async function runMaintenance(){maintStatus.textContent="RUNNING";maintStatus.className="status wait";try{await api("/api/maintenance/run",{method:"POST",body:"{}"});await loadMaintenance();alert("انتهى فحص الصيانة والإصلاح الذاتي.")}catch(e){alert("تعذر تشغيل الصيانة: "+e.message);await loadMaintenance()}}
+async function loadAudit(){const d=await api("/api/audit");auditList.innerHTML=d.items.map(x=>'<div class="item"><div class="row"><b style="flex:1">'+esc(x.event)+'</b><span class="muted small">'+x.created_at+'</span></div><div class="muted small">'+esc(x.entity_type||"")+' '+esc(x.entity_id||"")+'</div></div>').join("")}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+boot();
+</script>
+</body></html>+Number(r.profit||0).toFixed(2)+'</div><div class="muted small">CPA '+(r.cpa==null?"—":("$"+Number(r.cpa).toFixed(2)))+' • CPL '+(r.cpl==null?"—":("$"+Number(r.cpl).toFixed(2)))+'</div></div>').join(""):'<div class="muted">لا بيانات ربحية مرتبطة بالحملات بعد.</div>';
+    attributionList.innerHTML=(at.bySource||[]).length?(at.bySource||[]).slice(0,20).map(r=>'<div class="item"><b>'+esc(r.source)+' → '+esc(r.event_type)+'</b><div class="muted small">Events '+r.events+' • Value '+Number(r.total_value||0).toFixed(2)+'</div></div>').join(""):'<div class="muted">لا Attribution كافٍ بعد. يبدأ بعد وصول Customer Events مرتبطة بالمصادر.</div>';
   }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
 }
 async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
