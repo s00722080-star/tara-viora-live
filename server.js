@@ -617,6 +617,27 @@ app.post("/api/content",(req,res)=>{
     String(b.title||"Untitled"),b.platform||null,b.format||null,b.objective||null,b.hook||null,b.body||null,b.caption||null,b.cta||null,b.status||"draft",b.asset_id||null,b.scheduled_at||null);
   const id=Number(r.lastInsertRowid);audit("content_created",{userId:req.user.id,entityType:"content",entityId:id});res.json({ok:true,id});
 });
+app.post("/api/content/:id/qc",(req,res)=>{
+  const id=Number(req.params.id),c=one("SELECT * FROM content_items WHERE id=?",id);
+  if(!c)return res.status(404).json({ok:false,error:"content_not_found"});
+  const issues=[],warnings=[],strengths=[];
+  const hook=String(c.hook||""),body=String(c.body||""),caption=String(c.caption||""),cta=String(c.cta||"");
+  if(!hook)issues.push("لا يوجد Hook واضح.");
+  else if(hook.length>120)warnings.push("الـHook طويل؛ اختصريه ليكون أسرع في أول ثوان.");
+  else strengths.push("يوجد Hook واضح.");
+  if(!cta)warnings.push("لا يوجد CTA واضح.");
+  else strengths.push("CTA موجود.");
+  if(!c.platform)warnings.push("المنصة غير محددة.");
+  if(/يعالج|يشفي|يضمن|مضمون|100%|cure|guarantee/i.test(body+" "+caption))issues.push("يوجد Claim طبي/قطعي يحتاج مراجعة قبل النشر.");
+  if(/قبل وبعد|before\s*and\s*after/i.test(body+" "+caption))warnings.push("Before/After يحتاج مراجعة سياسة المنصة وسياق ادعاءات المنتج.");
+  if((body+caption).length<80)warnings.push("النص قصير جدًا وقد لا يشرح القيمة بوضوح.");
+  const score=Math.max(0,100-issues.length*30-warnings.length*10+Math.min(strengths.length*5,10));
+  const status=issues.length?"BLOCK":score>=80?"PASS":"REVIEW";
+  const result={score,status,issues,warnings,strengths};
+  audit("content_qc",{userId:req.user.id,entityType:"content",entityId:id,metadata:result});
+  res.json({ok:true,id,result});
+});
+
 app.post("/api/content/:id/status",(req,res)=>{
   const id=Number(req.params.id),status=String(req.body?.status||"draft");
   run("UPDATE content_items SET status=? WHERE id=?",status,id);audit("content_status_changed",{userId:req.user.id,entityType:"content",entityId:id,metadata:{status}});res.json({ok:true});
@@ -853,6 +874,18 @@ app.post("/api/smart-ads/plan",(req,res)=>{
   run("UPDATE jobs SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(plan),jobId);
   audit("smart_ad_plan_created",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{platform,objective}});
   res.json({ok:true,jobId,plan});
+});
+
+app.get("/api/executive/daily-brief",async(req,res)=>{
+  const continuity=await publishingContinuityCycle().catch(()=>continuityState);
+  const warning=await earlyWarningCycle().catch(()=>earlyWarningState);
+  const pending=Number(one("SELECT count(*) c FROM approvals WHERE status='pending'")?.c||0);
+  const jobsToday=Number(one("SELECT count(*) c FROM jobs WHERE created_at>=CURRENT_TIMESTAMP - INTERVAL '24 hours'")?.c||0);
+  const failed=Number(one("SELECT count(*) c FROM jobs WHERE status IN ('failed','human_action_required')")?.c||0);
+  const spend24=Number(one("SELECT coalesce(sum(amount),0) v FROM spend WHERE created_at>=CURRENT_TIMESTAMP - INTERVAL '24 hours'")?.v||0);
+  const topPatterns=all("SELECT platform,pattern_type,pattern_key,score,evidence_count FROM winning_patterns ORDER BY score DESC,evidence_count DESC LIMIT 5");
+  const budget=all("SELECT action,count(*) count FROM budget_recommendations WHERE status IN ('proposed','waiting_approval') GROUP BY action");
+  res.json({ok:true,generatedAt:new Date().toISOString(),continuity,warning,pendingApprovals:pending,jobs24h:jobsToday,failedOrHumanAction:failed,spend24h:spend24,topPatterns,budgetRecommendations:budget});
 });
 
 app.get("/api/growth/executive",async(req,res)=>{
