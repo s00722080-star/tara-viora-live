@@ -27,7 +27,9 @@ const upload=multer({dest:uploadDir,limits:{fileSize:1024*1024*1024}});
 const modules=[
 "فيديو حقيقي ومونتاج بروفيشنال","توليد فيديو بالذكاء الاصطناعي","صور وإعلانات","Carousel","Motion Graphics",
 "حملات ممولة","محتوى Organic","تحليل السوق","تحليل المنافسين","Trends & Hooks","تحليل التعليقات وصوت العميل",
-"أفضل وقت للنشر","قاعدة بيانات العملاء والسوق B2B","Analytics","Budget / Credits","Approvals","WhatsApp"
+"أفضل وقت للنشر","قاعدة بيانات العملاء والسوق B2B","Analytics","Budget / Credits","Approvals","WhatsApp",
+"Meta Growth Watcher","Viral Signal Analyzer","Winning Patterns","Smart Advertising","Smart Budget Allocator",
+"Profitability","Attribution","Customer Data Intelligence","Early Warning"
 ];
 
 function hashPassword(password,salt=crypto.randomBytes(16).toString("hex")){
@@ -50,6 +52,15 @@ function setSession(res,userId){
   res.setHeader("Set-Cookie",`tv_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${sessionHours*3600}`);
 }
 function routeCommand(q=""){
+  if(/ميتا|meta|instagram algorithm|facebook algorithm|خوارزمي/i.test(q)) return 17;
+  if(/فيرل|viral|retention|watch time|completion|اشارات النجاح/i.test(q)) return 18;
+  if(/winning|نمط ناجح|الانماط الناجحة|ما نجح/i.test(q)) return 19;
+  if(/اعلان ذكي|smart ad|creative test|اختبار اعلان/i.test(q)) return 20;
+  if(/توزيع.*ميزاني|ميزاني.*ذكي|budget allocator|خفض الهدر/i.test(q)) return 21;
+  if(/ربحي|profit|roas|عائد/i.test(q)) return 22;
+  if(/attribution|مصدر العميل|من اين جاء العميل|مصدر البيع/i.test(q)) return 23;
+  if(/داتا.*عميل|بيانات.*عميل|مشاهدين|customer data|viewer data/i.test(q)) return 24;
+  if(/انذار|تحذير|early warning|خطر توقف/i.test(q)) return 25;
   if(/فيديو|ريل|reel/i.test(q)) return 0;
   if(/صورة|صور|اعلان بصري/i.test(q)) return 2;
   if(/كاروسيل|carousel/i.test(q)) return 3;
@@ -60,7 +71,7 @@ function routeCommand(q=""){
   if(/ترند|hook|هوك/i.test(q)) return 9;
   if(/تعليق|صوت العميل|voc/i.test(q)) return 10;
   if(/وقت النشر|افضل وقت/i.test(q)) return 11;
-  if(/صيدلي|عياد|b2b|داتا|موزع/i.test(q)) return 12;
+  if(/صيدلي|عياد|b2b|موزع/i.test(q)) return 12;
   if(/تحليل نتائج|analytics|اداء/i.test(q)) return 13;
   if(/ميزانية|كريدت|budget/i.test(q)) return 14;
   if(/موافقة|approval/i.test(q)) return 15;
@@ -804,6 +815,46 @@ setTimeout(()=>earlyWarningCycle().catch(()=>{}),45*1000);
 app.get("/api/alerts",async(req,res)=>res.json({ok:true,...await earlyWarningCycle(),history:all("SELECT * FROM system_alerts ORDER BY id DESC LIMIT 100")}));
 app.post("/api/alerts/:id/resolve",(req,res)=>{run("UPDATE system_alerts SET status='resolved',resolved_at=CURRENT_TIMESTAMP WHERE id=?",Number(req.params.id));res.json({ok:true})});
 
+app.get("/api/growth/profitability",(req,res)=>{
+  const campaigns=all("SELECT * FROM campaigns ORDER BY id DESC LIMIT 300");
+  const items=campaigns.map(c=>{
+    const sig=all("SELECT lower(signal_type) signal_type,sum(value) v FROM growth_signals WHERE campaign_id=? GROUP BY lower(signal_type)",c.id);
+    const m=Object.fromEntries(sig.map(x=>[x.signal_type,Number(x.v||0)]));
+    const spend=Math.max(0,m.spend||0),revenue=Math.max(0,m.revenue||0),purchases=Math.max(0,m.purchases||m.conversions||0),leads=Math.max(0,m.leads||0);
+    return {campaignId:c.id,name:c.name,platform:c.platform,spend,revenue,profit:revenue-spend,roas:spend>0?revenue/spend:null,cpa:purchases>0?spend/purchases:null,cpl:leads>0?spend/leads:null,purchases,leads};
+  });
+  res.json({ok:true,items});
+});
+
+app.get("/api/growth/attribution",(req,res)=>{
+  const bySource=all("SELECT source,event_type,count(*) events,round(sum(value),2) total_value FROM customer_events GROUP BY source,event_type ORDER BY total_value DESC,events DESC");
+  const byCampaign=all("SELECT campaign_id,event_type,count(*) events,round(sum(value),2) total_value FROM customer_events WHERE campaign_id IS NOT NULL GROUP BY campaign_id,event_type ORDER BY total_value DESC,events DESC");
+  const byContent=all("SELECT content_id,event_type,count(*) events,round(sum(value),2) total_value FROM customer_events WHERE content_id IS NOT NULL GROUP BY content_id,event_type ORDER BY total_value DESC,events DESC");
+  res.json({ok:true,bySource,byCampaign,byContent});
+});
+
+app.post("/api/smart-ads/plan",(req,res)=>{
+  const objective=String(req.body?.objective||"conversions");
+  const platform=String(req.body?.platform||"meta").toLowerCase();
+  const product=String(req.body?.product||"TARA VIORA product");
+  const winners=all("SELECT * FROM winning_patterns WHERE platform IN (?, 'unknown') ORDER BY score DESC,evidence_count DESC LIMIT 6",platform);
+  const plan={
+    platform,objective,product,
+    testingBudgetRule:"ابدئي بميزانية اختبار صغيرة وحددي حد خسارة قبل التوسيع.",
+    variants:[
+      {name:"A",focus:"أفضل Hook مثبت من بياناتنا أو سؤال واضح",creative:"فيديو قصير أصلي",cta:"CTA واحد واضح"},
+      {name:"B",focus:"Problem → insight → solution",creative:"UGC/real product demonstration",cta:"تعرفي على التفاصيل"},
+      {name:"C",focus:"Educational proof / ingredient story",creative:"Carousel أو Reel علمي",cta:"احفظي/اسألي قبل الشراء"}
+    ],
+    winningPatterns:winners.map(x=>({type:x.pattern_type,key:x.pattern_key,score:x.score,evidence:x.evidence_count})),
+    guardrails:["لا توسيع قبل وجود بيانات كافية","لا زيادة ميزانية دفعة واحدة","أي إطلاق أو زيادة صرف تحتاج موافقة بشرية","لا Claims طبية غير موثقة"]
+  };
+  const jobId=createJob({type:"smart_ad_plan",title:`Smart ad test plan — ${product}`,payload:plan,provider:platform.toUpperCase(),requiresApproval:false,status:"completed"});
+  run("UPDATE jobs SET result_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",JSON.stringify(plan),jobId);
+  audit("smart_ad_plan_created",{userId:req.user.id,entityType:"job",entityId:jobId,metadata:{platform,objective}});
+  res.json({ok:true,jobId,plan});
+});
+
 app.get("/api/growth/executive",async(req,res)=>{
   const patterns=all("SELECT * FROM winning_patterns ORDER BY score DESC,evidence_count DESC LIMIT 8");
   const budget=all("SELECT br.*,c.name campaign_name FROM budget_recommendations br LEFT JOIN campaigns c ON c.id=br.campaign_id WHERE br.status IN ('proposed','waiting_approval') ORDER BY br.id DESC LIMIT 8");
@@ -1003,7 +1054,7 @@ app.post("/api/command",async(req,res)=>{
   let answer="",aiStatus="NOT_CONNECTED",automationStatus="NOT_CONNECTED",automationResult=null;
   if(client){
     try{
-      const r=await client.responses.create({model,instructions:`أنت المدير التنفيذي الذكي الداخلي لـ TARA VIORA. الهوية والمعرفة:\n${brandContext()}\nلا تدّعِ تنفيذ أي نشر/صرف/إرسال/رندر ما لم يرجع لك تنفيذ فعلي. قدّم خطة مختصرة وعملية بالعربية.`,input:`طلب المستخدم: ${q}\nالوحدة: ${moduleName}`});
+      const r=await client.responses.create({model,instructions:`أنت المدير التنفيذي الذكي الداخلي لـ TARA VIORA. الهوية والمعرفة:\n${brandContext()}\nلا تدّعِ تنفيذ أي نشر/صرف/إرسال/رندر ما لم يرجع لك تنفيذ فعلي. قدّم خطة مختصرة وعملية بالعربية.`,input:`طلب المستخدم: ${q}\nالوحدة: ${moduleName}\nبيانات نمو مختصرة: ${JSON.stringify({alerts:earlyWarningState?.alerts?.slice?.(0,5)||[],meta:metaWatcherState?.status||"IDLE"})}`});
       answer=r.output_text||""; aiStatus="CONNECTED";
     }catch(e){answer=`تم استلام الطلب: ${q}\nالوحدة: ${moduleName}\nسيتم التنفيذ ضمن النظام مع بوابة موافقة للخطوات الحساسة.`;aiStatus=/429|credits|quota/i.test(String(e.message))?"NO_CREDITS":"ERROR";}
   }else answer=`تم استلام الطلب: ${q}\nالوحدة: ${moduleName}\nسيتم التنفيذ ضمن النظام مع بوابة موافقة للخطوات الحساسة.`;
