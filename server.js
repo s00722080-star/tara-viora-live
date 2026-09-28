@@ -425,6 +425,46 @@ app.post("/api/integrations/meta/check",async(req,res)=>{
   const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
   try{const r=await fetch(`https://graph.facebook.com/${version}/me?fields=id,name&access_token=${encodeURIComponent(token)}`);const d=await r.json().catch(()=>({}));res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"META_READY":"META_AUTH_ERROR",account:r.ok?{id:d.id,name:d.name}:null});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
 });
+async function discoverWhatsAppFromMeta(){
+  const token=getSecret("meta","access_token")||process.env.META_ACCESS_TOKEN;
+  if(!token)return {ok:false,status:"META_NOT_CONNECTED"};
+  const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
+  const g=async(pathName)=>{
+    const sep=pathName.includes("?")?"&":"?";
+    const r=await fetch(`https://graph.facebook.com/${version}/${pathName}${sep}access_token=${encodeURIComponent(token)}`);
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d?.error?.message||`graph_${r.status}`);
+    return d;
+  };
+  try{
+    const businesses=await g("me/businesses?fields=id,name&limit=100");
+    const candidates=[];
+    for(const b of businesses.data||[]){
+      let accounts;
+      try{accounts=await g(`${encodeURIComponent(b.id)}/owned_whatsapp_business_accounts?fields=id,name&limit=100`)}catch{continue}
+      for(const w of accounts.data||[]){
+        let phones;
+        try{phones=await g(`${encodeURIComponent(w.id)}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status&limit=100`)}catch{continue}
+        for(const p of phones.data||[])candidates.push({businessId:b.id,businessName:b.name||"",wabaId:w.id,wabaName:w.name||"",phoneId:p.id,displayPhone:p.display_phone_number||"",verifiedName:p.verified_name||"",quality:p.quality_rating||"",verification:p.code_verification_status||""});
+      }
+    }
+    if(!candidates.length)return {ok:false,status:"NO_WHATSAPP_SENDER_FOUND"};
+    const preferred=candidates.find(x=>/tara\s*viora/i.test((x.businessName||"")+" "+(x.wabaName||"")+" "+(x.verifiedName||"")))||candidates[0];
+    putSecret("whatsapp","access_token",token);
+    putSecret("whatsapp","phone_number_id",preferred.phoneId);
+    putSecret("whatsapp","waba_id",preferred.wabaId);
+    audit("whatsapp_auto_connected_from_meta",{entityType:"integration",entityId:"whatsapp",metadata:{businessId:preferred.businessId,wabaId:preferred.wabaId,phoneId:preferred.phoneId,displayPhone:preferred.displayPhone}});
+    return {ok:true,status:"WHATSAPP_CONNECTED_FROM_META",sender:{displayPhone:preferred.displayPhone,verifiedName:preferred.verifiedName,quality:preferred.quality,verification:preferred.verification},count:candidates.length};
+  }catch(e){
+    return {ok:false,status:"META_WHATSAPP_DISCOVERY_FAILED",error:String(e.message||e)};
+  }
+}
+
+app.post("/api/integrations/whatsapp/auto-connect",async(req,res)=>{
+  const r=await discoverWhatsAppFromMeta();
+  res.status(r.ok?200:409).json(r);
+});
+
 app.post("/api/integrations/whatsapp/check",async(req,res)=>{
   const token=getSecret("whatsapp","access_token"),phoneId=getSecret("whatsapp","phone_number_id");if(!token||!phoneId)return res.status(409).json({ok:false,provider:"NOT_CONNECTED"});
   const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
@@ -1610,5 +1650,9 @@ app.listen(port,"0.0.0.0",()=>{
     let hf="UNKNOWN";if(n8nBase){const r=await postN8n("tara-viora-higgsfield-check",{source:"startup-production-health"});hf=r.data?.provider||"UNKNOWN";}
     const dbOk=Number(one("SELECT 1 v").v)===1,vol=fs.existsSync(DATA_DIR),ff=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0;
     console.log("TARA_VIORA_PRODUCTION_HEALTH",JSON.stringify({db:dbOk,volume:vol,ffmpeg:ff,n8n:Boolean(n8nBase),higgsfield:hf}));
+    if(!hasSecret("whatsapp","access_token")||!hasSecret("whatsapp","phone_number_id")){
+      const wa=await discoverWhatsAppFromMeta().catch(e=>({ok:false,status:"AUTO_CONNECT_ERROR",error:String(e.message||e)}));
+      console.log("TARA_VIORA_WHATSAPP_AUTO_CONNECT",JSON.stringify({ok:wa.ok,status:wa.status,sender:wa.sender||null,count:wa.count||0}));
+    }
   }catch(e){console.error("TARA_VIORA_PRODUCTION_HEALTH_ERROR",e?.message||e)}},3000);
 });
