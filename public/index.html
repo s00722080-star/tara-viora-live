@@ -292,11 +292,20 @@ const MODULES=[
 ["Early Warning","Detect risk before publishing stops"]
 ];
 let authMode="setup";
+const authScreenEl=document.getElementById("authScreen");
+const authTitleEl=document.getElementById("authTitle");
+const authBtnEl=document.getElementById("authBtn");
+const authMsgEl=document.getElementById("authMsg");
+const authUserEl=document.getElementById("authUser");
+const authPassEl=document.getElementById("authPass");
 
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...(opt.body instanceof FormData?{}:{"Content-Type":"application/json"}),...(opt.headers||{})}});if(r.status===401){showAuth("login");throw new Error("auth_required")}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"request_failed");return d}
-function showAuth(mode){authMode=mode;authScreen.classList.remove("hide");authTitle.textContent=mode==="setup"?"تهيئة المالك لأول مرة":"تسجيل الدخول";authBtn.textContent=mode==="setup"?"إنشاء الحساب":"دخول"}
-async function boot(){const s=await fetch("/api/auth/status").then(r=>r.json());if(!s.configured)showAuth("setup");else if(!s.authenticated)showAuth("login");else{authScreen.classList.add("hide");await refreshAll()}}
-authBtn.onclick=async()=>{authMsg.textContent="";try{await api(authMode==="setup"?"/api/auth/setup":"/api/auth/login",{method:"POST",body:JSON.stringify({username:authUser.value.trim(),password:authPass.value})});authScreen.classList.add("hide");await refreshAll()}catch(e){authMsg.textContent=e.message==="password_min_10"?"كلمة المرور لازم تكون 10 أحرف على الأقل.":"تعذر الدخول/الإعداد."}}
+function showAuth(mode){authMode=mode;authScreenEl.classList.remove("hide");authTitleEl.textContent=mode==="setup"?"تهيئة المالك لأول مرة":"تسجيل الدخول";authBtnEl.textContent=mode==="setup"?"إنشاء الحساب":"دخول";setTimeout(()=>authPassEl.focus(),50)}
+async function boot(){try{const s=await fetch("/api/auth/status",{cache:"no-store"}).then(r=>r.json());if(!s.configured)showAuth("setup");else if(!s.authenticated)showAuth("login");else{authScreenEl.classList.add("hide");await refreshAll()}}catch(e){showAuth("login");authMsgEl.textContent="تعذر فحص حالة الدخول. حدّثي الصفحة وحاولي مجددًا."}}
+async function submitAuth(){authMsgEl.textContent="";authBtnEl.disabled=true;authBtnEl.textContent="جاري التحقق...";try{const username=authUserEl.value.trim();const password=authPassEl.value;if(!username||!password){authMsgEl.textContent="أدخلي اسم المستخدم وكلمة المرور.";return}await api(authMode==="setup"?"/api/auth/setup":"/api/auth/login",{method:"POST",body:JSON.stringify({username,password})});authScreenEl.classList.add("hide");await refreshAll()}catch(e){authMsgEl.textContent=e.message==="password_min_10"?"كلمة المرور لازم تكون 10 أحرف على الأقل.":e.message==="invalid_login"?"اسم المستخدم أو كلمة المرور غير صحيحة.":"تعذر الدخول/الإعداد."}finally{authBtnEl.disabled=false;authBtnEl.textContent=authMode==="setup"?"إنشاء الحساب":"دخول"}}
+authBtnEl.addEventListener("click",submitAuth);
+authPassEl.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();submitAuth()}});
+authUserEl.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();authPassEl.focus()}});
 logoutBtn.onclick=async()=>{try{await api("/api/auth/logout",{method:"POST",body:"{}"})}catch{}showAuth("login")}
 
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll("main section").forEach(s=>s.classList.add("hide"));document.getElementById(b.dataset.v).classList.remove("hide");document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("active",x===b)); if(b.dataset.v==="jobs")loadJobs();if(b.dataset.v==="approvals")loadApprovals();if(b.dataset.v==="media")loadAssets();if(b.dataset.v==="content")loadContent();if(b.dataset.v==="analytics")loadAnalytics();if(b.dataset.v==="growth")loadGrowth();if(b.dataset.v==="crm")loadLeads();if(b.dataset.v==="brand")loadBrand();if(b.dataset.v==="integrations")loadIntegrations();if(b.dataset.v==="maintenance")loadMaintenance();if(b.dataset.v==="audit")loadAudit();});
