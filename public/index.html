@@ -444,8 +444,16 @@ async function loadDailyReportStatus(){
 }
 async function sendDailyReportNow(){
   if(window.dailyReportMsg)dailyReportMsg.textContent="جاري إرسال التقرير...";
-  try{const d=await api("/api/daily-report/send-now",{method:"POST",body:"{}"});dailyReportMsg.textContent="تم إرسال التقرير اليومي ✅";await loadDailyReportStatus()}
-  catch(e){dailyReportMsg.textContent=e.message==="WAITING_RECIPIENT_OR_WHATSAPP"?"احفظي رقم الاستقبال وتحققي من ربط WhatsApp أولًا.":"تعذر الإرسال: "+e.message}
+  try{
+    const r=await fetch("/api/daily-report/send-now",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok){dailyReportMsg.textContent="تم إرسال التقرير اليومي ✅";await loadDailyReportStatus();return}
+    if(d.error==="whatsapp_sender_not_configured"){
+      dailyReportMsg.textContent="رقم الاستقبال محفوظ ✅ لكن جهة الإرسال WhatsApp Business API غير مربوطة بعد.";
+      return;
+    }
+    dailyReportMsg.textContent="تعذر الإرسال: "+(d.error||d.status||"request_failed");
+  }catch(e){dailyReportMsg.textContent="تعذر الإرسال: "+e.message}
 }
 async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
 async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
