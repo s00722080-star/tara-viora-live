@@ -1522,7 +1522,7 @@ function arabicDailyReportText(){
 }
 
 async function sendDailyArabicReport({manual=false}={}){
-  const recipient=getSecret("whatsapp","report_recipient");
+  const recipient=getSecret("whatsapp","report_recipient")||process.env.WHATSAPP_REPORT_RECIPIENT;
   const configured=Boolean(recipient&&hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"));
   const report=arabicDailyReportText();
   setting("daily_report_latest_text",report);
@@ -1576,7 +1576,7 @@ app.get("/api/daily-report/status",(req,res)=>{
     ok:true,
     enabled:true,
     schedule:"09:00 Asia/Beirut",
-    recipientConfigured:hasSecret("whatsapp","report_recipient"),
+    recipientConfigured:Boolean(getSecret("whatsapp","report_recipient")||process.env.WHATSAPP_REPORT_RECIPIENT),
     whatsappConfigured:hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"),
     templateConfigured:hasSecret("whatsapp","report_template_name"),
     status:setting("daily_report_delivery_status")||"WAITING_FIRST_RUN",
