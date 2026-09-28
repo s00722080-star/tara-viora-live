@@ -346,20 +346,54 @@ async function loadAnalytics(){const [a,b,v]=await Promise.all([api("/api/analyt
 async function addVoc(){const text=vocText.value.trim();if(!text)return;await api("/api/voc/ingest",{method:"POST",body:JSON.stringify({text,platform:vocPlatform.value})});vocText.value="";await loadAnalytics()}
 async function loadGrowth(){
   try{
-    const [x,p,b,c,m,a,pr,at]=await Promise.all([
-      api("/api/growth/executive"),api("/api/growth/winning-patterns"),api("/api/budget/recommendations"),
-      api("/api/customer-data/summary"),api("/api/meta-watcher/status"),api("/api/alerts"),
-      api("/api/growth/profitability"),api("/api/growth/attribution")
+    const [x,p,b,cust,m,a,pr,at]=await Promise.all([
+      api("/api/growth/executive"),
+      api("/api/growth/winning-patterns"),
+      api("/api/budget/recommendations"),
+      api("/api/customer-data/summary"),
+      api("/api/meta-watcher/status"),
+      api("/api/alerts"),
+      api("/api/growth/profitability"),
+      api("/api/growth/attribution")
     ]);
-    gxEvents.textContent=x.customer?.events||0;gxPeople.textContent=x.customer?.people||0;
-    gxPatterns.textContent=(p.items||[]).length;gxBudget.textContent=(b.items||[]).filter(r=>["proposed","waiting_approval"].includes(r.status)).length;
-    gxAlerts.textContent=(a.alerts||[]).length;
-    winningPatterns.innerHTML=(p.items||[]).length?(p.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.platform)+' • '+esc(r.pattern_type)+' • '+esc(r.pattern_key)+'</b><span class="status '+(r.status==="validated"?"ok":"wait")+'">'+esc(r.status)+'</span></div><div class="muted small">Score '+Number(r.score||0).toFixed(2)+' • Evidence '+r.evidence_count+'</div></div>').join(""):'<div class="muted">ما زلنا نحتاج بيانات أداء كافية لبناء أنماط رابحة.</div>';
-    budgetRecs.innerHTML=(b.items||[]).length?(b.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.campaign_name||("Campaign #"+r.campaign_id))+'</b><span class="status '+(r.action==="INCREASE"?"ok":r.action==="REDUCE"?"bad":"wait")+'">'+esc(r.action)+'</span></div><div>'+Number(r.current_budget||0).toFixed(2)+' → '+Number(r.suggested_budget||0).toFixed(2)+'</div><div class="muted small">'+esc(r.reason||"")+' • Confidence '+Math.round(Number(r.confidence||0)*100)+'%</div>'+(r.status==="proposed"?'<button class="btn alt" style="margin-top:8px" onclick="prepareBudgetRec('+r.id+')">إرسال للموافقة</button>':'<div class="muted small">الحالة: '+esc(r.status)+'</div>')+'</div>').join(""):'<div class="muted">لا توصيات ميزانية بعد.</div>';
-    customerDataSummary.innerHTML=(c.byEvent||[]).length?(c.byEvent||[]).map(r=>'<div class="item"><b>'+esc(r.source)+' • '+esc(r.event_type)+'</b><div class="muted small">Events '+r.count+' • Value '+Number(r.total_value||0).toFixed(2)+'</div></div>').join(""):'<div class="muted">لا Customer Events بعد. ستبدأ بالامتلاء بعد ربط Meta/WhatsApp/الموقع والحملات.</div>';
-    growthAlerts.innerHTML=(a.alerts||[]).length?(a.alerts||[]).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.title)+'</b><span class="status '+(r.severity==="critical"?"bad":"wait")+'">'+esc(r.severity)+'</span></div><div class="muted small">'+esc(r.details||"")+'</div></div>').join(""):'<div class="muted">لا إنذارات مبكرة حاليًا.</div>';
-    const mu=m.items||[];metaWatcherOut.innerHTML=(m.summary?'<div class="item" style="white-space:pre-wrap">'+esc(m.summary)+'</div>':"")+(mu.length?mu.slice(0,5).map(r=>'<div class="item"><b>'+esc(r.title)+'</b><div class="muted small">'+esc(r.created_at||"")+'</div></div>').join(""):'<div class="muted">لم يتم تشغيل Meta Watcher بعد.</div>');
-    profitabilityList.innerHTML=(pr.items||[]).length?(pr.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.name||("Campaign #"+r.campaignId))+'</b><span class="status '+(Number(r.profit||0)>0?"ok":Number(r.spend||0)>0?"bad":"wait")+'">'+(r.roas==null?"NO DATA":("ROAS "+Number(r.roas).toFixed(2)))+'</span></div><div>Spend   }catch(e){growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>'}
+    if(window.gxEvents) gxEvents.textContent=x.customer?.events||0;
+    if(window.gxPeople) gxPeople.textContent=x.customer?.people||0;
+    if(window.gxPatterns) gxPatterns.textContent=(p.items||[]).length;
+    if(window.gxBudget) gxBudget.textContent=(b.items||[]).filter(r=>["proposed","waiting_approval"].includes(r.status)).length;
+    if(window.gxAlerts) gxAlerts.textContent=(a.alerts||[]).length;
+
+    if(window.winningPatterns) winningPatterns.innerHTML=(p.items||[]).length
+      ? (p.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.platform)+' • '+esc(r.pattern_type)+' • '+esc(r.pattern_key)+'</b><span class="status '+(r.status==="validated"?"ok":"wait")+'">'+esc(r.status)+'</span></div><div class="muted small">Score '+Number(r.score||0).toFixed(2)+' • Evidence '+r.evidence_count+'</div></div>').join("")
+      : '<div class="muted">ما زلنا نحتاج بيانات أداء كافية لبناء أنماط رابحة.</div>';
+
+    if(window.budgetRecs) budgetRecs.innerHTML=(b.items||[]).length
+      ? (b.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.campaign_name||("Campaign #"+r.campaign_id))+'</b><span class="status '+(r.action==="INCREASE"?"ok":r.action==="REDUCE"?"bad":"wait")+'">'+esc(r.action)+'</span></div><div>'+Number(r.current_budget||0).toFixed(2)+' → '+Number(r.suggested_budget||0).toFixed(2)+'</div><div class="muted small">'+esc(r.reason||"")+' • Confidence '+Math.round(Number(r.confidence||0)*100)+'%</div>'+(r.status==="proposed"?'<button class="btn alt" style="margin-top:8px" onclick="prepareBudgetRec('+r.id+')">إرسال للموافقة</button>':'<div class="muted small">الحالة: '+esc(r.status)+'</div>')+'</div>').join("")
+      : '<div class="muted">لا توصيات ميزانية بعد.</div>';
+
+    if(window.customerDataSummary) customerDataSummary.innerHTML=(cust.byEvent||[]).length
+      ? (cust.byEvent||[]).map(r=>'<div class="item"><b>'+esc(r.source)+' • '+esc(r.event_type)+'</b><div class="muted small">Events '+r.count+' • Value '+Number(r.total_value||0).toFixed(2)+'</div></div>').join("")
+      : '<div class="muted">لا Customer Events بعد.</div>';
+
+    if(window.growthAlerts) growthAlerts.innerHTML=(a.alerts||[]).length
+      ? (a.alerts||[]).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.title)+'</b><span class="status '+(r.severity==="critical"?"bad":"wait")+'">'+esc(r.severity)+'</span></div><div class="muted small">'+esc(r.details||"")+'</div></div>').join("")
+      : '<div class="muted">لا إنذارات مبكرة حاليًا.</div>';
+
+    if(window.metaWatcherOut){
+      const mu=m.items||[];
+      metaWatcherOut.innerHTML=(m.summary?'<div class="item" style="white-space:pre-wrap">'+esc(m.summary)+'</div>':"")
+        +(mu.length?mu.slice(0,5).map(r=>'<div class="item"><b>'+esc(r.title)+'</b><div class="muted small">'+esc(r.created_at||"")+'</div></div>').join(""):'<div class="muted">لم يتم تشغيل Meta Watcher بعد.</div>');
+    }
+
+    if(window.profitabilityList) profitabilityList.innerHTML=(pr.items||[]).length
+      ? (pr.items||[]).slice(0,20).map(r=>'<div class="item"><div class="row"><b style="flex:1">'+esc(r.name||("Campaign #"+r.campaignId))+'</b><span class="status '+(Number(r.profit||0)>0?"ok":Number(r.spend||0)>0?"bad":"wait")+'">'+(r.roas==null?"NO DATA":("ROAS "+Number(r.roas).toFixed(2)))+'</span></div><div class="muted small">Spend '+Number(r.spend||0).toFixed(2)+' • Revenue '+Number(r.revenue||0).toFixed(2)+' • Profit '+Number(r.profit||0).toFixed(2)+'</div></div>').join("")
+      : '<div class="muted">لا بيانات ربحية بعد.</div>';
+
+    if(window.attributionList) attributionList.innerHTML=(at.items||[]).length
+      ? (at.items||[]).slice(0,20).map(r=>'<div class="item"><b>'+esc(r.source||r.platform||"unknown")+'</b><div class="muted small">Leads '+Number(r.leads||0)+' • Sales '+Number(r.sales||0)+' • Revenue '+Number(r.revenue||0).toFixed(2)+'</div></div>').join("")
+      : '<div class="muted">لا بيانات Attribution بعد.</div>';
+  }catch(e){
+    if(window.growthAlerts) growthAlerts.innerHTML='<div class="item bad">'+esc(e.message)+'</div>';
+  }
 }
 async function analyzeGrowth(){try{const d=await api("/api/growth/analyze",{method:"POST",body:"{}"});alert("تم تحليل "+d.analyzed+" محتوى وتحديث مكتبة الأنماط.");await loadGrowth()}catch(e){alert("تعذر التحليل: "+e.message)}}
 async function runBudgetOptimizer(){try{const d=await api("/api/budget/optimizer/run",{method:"POST",body:"{}"});alert("تم إنشاء "+d.created+" توصية جديدة بدون تنفيذ أي صرف.");await loadGrowth()}catch(e){alert("تعذر تحليل الميزانية: "+e.message)}}
