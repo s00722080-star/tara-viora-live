@@ -1529,7 +1529,7 @@ async function sendDailyArabicReport({manual=false}={}){
   setting("daily_report_latest_generated_at",new Date().toISOString());
   if(!configured){
     setting("daily_report_delivery_status","WAITING_RECIPIENT_OR_WHATSAPP");
-    return {ok:false,status:"WAITING_RECIPIENT_OR_WHATSAPP",report};
+    return {ok:false,status:"WAITING_RECIPIENT_OR_WHATSAPP",error:"whatsapp_sender_not_configured",report};
   }
   const templateName=getSecret("whatsapp","report_template_name");
   const language=getSecret("whatsapp","report_template_language")||"ar";
