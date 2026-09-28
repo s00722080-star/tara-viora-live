@@ -117,6 +117,15 @@ main{padding:24px;max-width:1450px;width:100%;margin:auto}.top{display:flex;just
       <div class="field"><label>Phone Number ID</label><input id="waPhoneId"></div>
       <div class="row" style="margin-top:10px"><button class="btn" onclick="saveWhatsApp()">حفظ وربط</button><button class="btn alt" onclick="checkProvider('whatsapp')">فحص</button></div>
       <div id="waMsg" class="muted small" style="margin-top:8px"></div>
+      <div style="margin-top:14px;border-top:1px solid #302b23;padding-top:14px">
+        <h3 style="margin:0 0 8px">التقرير اليومي بالعربية</h3>
+        <div class="muted small">الإرسال التلقائي يوميًا الساعة 09:00 بتوقيت بيروت.</div>
+        <div class="field" style="margin-top:8px"><label>رقم WhatsApp لاستقبال التقرير</label><input id="waReportRecipient" placeholder="+961..."></div>
+        <div class="field" style="margin-top:8px"><label>اسم Template معتمد (اختياري)</label><input id="waReportTemplate" placeholder="daily_system_report"></div>
+        <div class="field" style="margin-top:8px"><label>لغة Template</label><input id="waReportLanguage" value="ar"></div>
+        <div class="row" style="margin-top:10px"><button class="btn" onclick="saveDailyReportSettings()">حفظ إعداد التقرير</button><button class="btn alt" onclick="sendDailyReportNow()">إرسال تقرير الآن</button></div>
+        <div id="dailyReportMsg" class="muted small" style="margin-top:8px">بانتظار إعداد رقم الاستقبال.</div>
+      </div>
     </div>
 
     <div class="panel">
@@ -415,13 +424,29 @@ async function createSmartAdPlan(){
 async function loadBrand(){const d=await api("/api/brand");brandList.innerHTML=d.items.map(x=>'<div class="item"><div class="muted small">'+esc(x.kind)+'</div><b>'+esc(x.title)+'</b><div style="margin-top:6px">'+esc(x.content)+'</div></div>').join("")}
 async function addKnowledge(){await api("/api/brand",{method:"POST",body:JSON.stringify({kind:bkKind.value,title:bkTitle.value,content:bkContent.value})});bkKind.value=bkTitle.value=bkContent.value="";await loadBrand()}
 
-async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{}}
+async function loadIntegrations(){const d=await api("/api/integrations");integrationList.innerHTML=Object.values(d.providers).map(x=>'<div class="card"><div class="row"><b style="flex:1">'+esc(x.label)+'</b><span class="status '+(x.connected?"ok":"bad")+'">'+esc(x.status)+'</span></div>'+(x.label==="TikTok"?'<div class="muted small" style="margin-top:8px">Direct Publish: '+(x.publishReady?"READY":"WAITING_FOR_VIDEO_PUBLISH")+'</div>':"")+'</div>').join("");const t=d.providers?.tiktok;if(window.ttPublishMsg&&t)ttPublishMsg.textContent=t.publishReady?"حالة النشر المباشر: READY ✅":"حالة النشر المباشر: بانتظار موافقة TikTok على video.publish.";window.integrationRedirects=d.redirects||{};await loadDailyReportStatus().catch(()=>{})}
 async function saveCred(provider,fields,msgEl){try{const d=await api("/api/integrations/credentials",{method:"POST",body:JSON.stringify({provider,fields})});msgEl.textContent="تم الحفظ المشفّر: "+d.saved+" حقل.";await loadIntegrations();return true}catch(e){msgEl.textContent="تعذر الحفظ: "+e.message;return false}}
 async function saveTikTokDev(){const ok=await saveCred("tiktok",{client_key:ttClientKey.value,client_secret:ttClientSecret.value},ttMsg);if(ok){ttClientSecret.value="";ttMsg.textContent+=" جاهز للـOAuth."}}
 async function connectTikTok(){try{const d=await api("/api/integrations/tiktok/connect");window.location.href=d.authorizeUrl}catch(e){ttMsg.textContent=e.message==="tiktok_developer_credentials_required"?"احفظي Client Key وClient Secret أولًا.":"تعذر بدء الربط: "+e.message}}
 async function connectTikTokPublish(){try{const d=await api("/api/integrations/tiktok/connect-publish");window.location.href=d.authorizeUrl}catch(e){ttPublishMsg.textContent="تعذر تفويض النشر: "+e.message}}
 async function saveMeta(){const ok=await saveCred("meta",{access_token:metaToken.value,page_id:metaPage.value,ig_user_id:metaIg.value,graph_version:metaVersion.value},metaMsg);if(ok){metaToken.value="";await checkProvider("meta")}}
 async function saveWhatsApp(){const ok=await saveCred("whatsapp",{access_token:waToken.value,phone_number_id:waPhoneId.value},waMsg);if(ok){waToken.value="";await checkProvider("whatsapp")}}
+async function saveDailyReportSettings(){
+  const fields={report_recipient:waReportRecipient.value.trim(),report_template_name:waReportTemplate.value.trim(),report_template_language:waReportLanguage.value.trim()||"ar"};
+  const ok=await saveCred("whatsapp",fields,dailyReportMsg);
+  if(ok){waReportRecipient.value="";waReportTemplate.value="";await loadDailyReportStatus();}
+}
+async function loadDailyReportStatus(){
+  try{
+    const d=await api("/api/daily-report/status");
+    if(window.dailyReportMsg)dailyReportMsg.textContent="الحالة: "+(d.status||"—")+" • الموعد "+(d.schedule||"09:00 Asia/Beirut")+" • رقم الاستقبال "+(d.recipientConfigured?"محفوظ ✅":"غير محفوظ ⚠️")+(d.lastSentAt?" • آخر إرسال "+d.lastSentAt:"");
+  }catch(e){if(window.dailyReportMsg)dailyReportMsg.textContent="تعذر قراءة حالة التقرير: "+e.message}
+}
+async function sendDailyReportNow(){
+  if(window.dailyReportMsg)dailyReportMsg.textContent="جاري إرسال التقرير...";
+  try{const d=await api("/api/daily-report/send-now",{method:"POST",body:"{}"});dailyReportMsg.textContent="تم إرسال التقرير اليومي ✅";await loadDailyReportStatus()}
+  catch(e){dailyReportMsg.textContent=e.message==="WAITING_RECIPIENT_OR_WHATSAPP"?"احفظي رقم الاستقبال وتحققي من ربط WhatsApp أولًا.":"تعذر الإرسال: "+e.message}
+}
 async function saveElevenLabs(){const ok=await saveCred("elevenlabs",{api_key:elKey.value},elMsg);if(ok){elKey.value="";await checkProvider("elevenlabs")}}
 async function checkProvider(p){const map={tiktok:["/api/integrations/tiktok/check",ttMsg],meta:["/api/integrations/meta/check",metaMsg],whatsapp:["/api/integrations/whatsapp/check",waMsg],elevenlabs:["/api/integrations/elevenlabs/check",elMsg]};const m=map[p];if(!m)return;try{const d=await api(m[0],{method:p==="tiktok"?"GET":"POST",body:p==="tiktok"?undefined:"{}"});m[1].textContent=d.provider||"READY";await loadIntegrations()}catch(e){m[1].textContent="غير جاهز: "+e.message}}
 async function loadMaintenance(){try{const d=await api("/api/maintenance/status");maintStatus.textContent=d.status||"IDLE";maintStatus.className="status "+(d.status==="HEALTHY"?"ok":d.status==="CRITICAL"?"bad":"wait");const checks=d.checks||{};maintChecks.innerHTML=Object.entries(checks).map(([k,v])=>'<div class="card"><div class="muted small">'+esc(k)+'</div><div style="margin-top:6px"><span class="status '+(v==="READY"||v==="CONNECTED"?"ok":v==="ERROR"||v==="REAUTH_REQUIRED"?"bad":"wait")+'">'+esc(v)+'</span></div></div>').join("");maintRepairs.innerHTML=(d.repairs||[]).length?(d.repairs||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا إصلاحات مطلوبة حاليًا.</div>';maintErrors.innerHTML=(d.errors||[]).length?(d.errors||[]).map(x=>'<div class="item">'+esc(x)+'</div>').join(""):'<div class="muted">لا أعطال تحتاج تدخّل.</div>'}catch(e){maintStatus.textContent="ERROR";maintStatus.className="status bad";maintErrors.innerHTML='<div class="item">'+esc(e.message)+'</div>'}try{await loadContinuity()}catch{}}
