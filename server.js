@@ -376,6 +376,20 @@ app.get("/api/integrations/tiktok/connect-publish",(req,res)=>{
   const q=new URLSearchParams({client_key:clientKey,response_type:"code",scope:"user.info.basic,video.publish",redirect_uri:redirectUri,state});
   res.json({ok:true,authorizeUrl:"https://www.tiktok.com/v2/auth/authorize/?"+q.toString(),redirectUri});
 });
+app.get("/api/public/integrations/tiktok/status",async(req,res)=>{
+  try{
+    const scope=String(getSecret("tiktok","scope")||"");
+    const connected=hasSecret("tiktok","refresh_token")&&hasSecret("tiktok","client_key")&&hasSecret("tiktok","client_secret");
+    const publishReady=scope.split(",").map(x=>x.trim()).includes("video.publish");
+    if(!connected)return res.json({ok:true,provider:"TIKTOK_NOT_CONNECTED",connected:false,publishReady:false});
+    try{
+      const token=await tiktokAccessToken();
+      return res.json({ok:true,provider:token?"TIKTOK_CONNECTED":"TIKTOK_REAUTH_REQUIRED",connected:Boolean(token),publishReady:Boolean(token)&&publishReady,check:"command_center"});
+    }catch(e){
+      return res.json({ok:true,provider:"TIKTOK_REAUTH_REQUIRED",connected:false,publishReady:false,check:"command_center"});
+    }
+  }catch(e){return res.status(500).json({ok:false,provider:"TIKTOK_STATUS_ERROR"});}
+});
 app.get("/api/integrations/tiktok/check",async(req,res)=>{
   try{
     const token=await tiktokAccessToken();
