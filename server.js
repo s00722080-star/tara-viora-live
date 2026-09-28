@@ -354,7 +354,7 @@ app.post("/api/integrations/credentials",(req,res)=>{
   const allowed={
     tiktok:["client_key","client_secret"],
     meta:["app_id","app_secret","access_token","page_id","ig_user_id","graph_version"],
-    whatsapp:["access_token","phone_number_id","verify_token","app_secret"],
+    whatsapp:["access_token","phone_number_id","verify_token","app_secret","report_recipient","report_template_name","report_template_language"],
     elevenlabs:["api_key"]
   };
   if(!allowed[provider])return res.status(400).json({ok:false,error:"provider_not_supported"});
@@ -1487,9 +1487,115 @@ async function publishingContinuityCycle(){
   return continuityState;
 }
 
+
+function arabicDailyReportText(){
+  const pending=Number(one("SELECT count(*) c FROM approvals WHERE status='pending'")?.c||0);
+  const jobs24=Number(one("SELECT count(*) c FROM jobs WHERE created_at>=CURRENT_TIMESTAMP - INTERVAL '24 hours'")?.c||0);
+  const failed=Number(one("SELECT count(*) c FROM jobs WHERE status IN ('failed','human_action_required')")?.c||0);
+  const spend24=Number(one("SELECT coalesce(sum(amount),0) v FROM spend WHERE created_at>=CURRENT_TIMESTAMP - INTERVAL '24 hours'")?.v||0);
+  const tiktok=hasSecret("tiktok","refresh_token")?"متصل ✅":"يحتاج ربط ⚠️";
+  const meta=hasSecret("meta","access_token")?"متصل ✅":"يحتاج ربط ⚠️";
+  const whatsapp=(hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"))?"متصل ✅":"يحتاج ربط ⚠️";
+  const maint=maintenanceState?.status||"IDLE";
+  const cont=continuityState?.status||"IDLE";
+  const alerts=Array.isArray(earlyWarningState?.alerts)?earlyWarningState.alerts.length:0;
+  const now=new Intl.DateTimeFormat("ar-LB",{timeZone:"Asia/Beirut",dateStyle:"full",timeStyle:"short"}).format(new Date());
+  return [
+    "تقرير TARA VIORA اليومي",
+    now,
+    "",
+    "حالة النظام: "+(maint==="HEALTHY"&&cont==="HEALTHY"?"سليمة ✅":"تحتاج متابعة ⚠️"),
+    "الصيانة التقنية: "+maint,
+    "استمرارية النشر: "+cont,
+    "Facebook / Instagram: "+meta,
+    "TikTok: "+tiktok,
+    "WhatsApp: "+whatsapp,
+    "",
+    "المهام آخر 24 ساعة: "+jobs24,
+    "الموافقات المعلقة: "+pending,
+    "الأعطال أو التدخل البشري: "+failed,
+    "الإنفاق آخر 24 ساعة: $"+spend24.toFixed(2),
+    "التنبيهات: "+alerts,
+    "",
+    "ملاحظة: لا يتم نشر محتوى عام أو زيادة صرف إعلاني بدون موافقة بشرية."
+  ].join("\n");
+}
+
+async function sendDailyArabicReport({manual=false}={}){
+  const recipient=getSecret("whatsapp","report_recipient");
+  const configured=Boolean(recipient&&hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"));
+  const report=arabicDailyReportText();
+  setting("daily_report_latest_text",report);
+  setting("daily_report_latest_generated_at",new Date().toISOString());
+  if(!configured){
+    setting("daily_report_delivery_status","WAITING_RECIPIENT_OR_WHATSAPP");
+    return {ok:false,status:"WAITING_RECIPIENT_OR_WHATSAPP",report};
+  }
+  const templateName=getSecret("whatsapp","report_template_name");
+  const language=getSecret("whatsapp","report_template_language")||"ar";
+  try{
+    let result;
+    if(templateName){
+      result=await whatsappSend({
+        to:recipient,
+        templateName,
+        language,
+        components:[{type:"body",parameters:[{type:"text",text:report.slice(0,900)}]}]
+      });
+    }else{
+      result=await whatsappSend({to:recipient,message:report});
+    }
+    setting("daily_report_last_sent_at",new Date().toISOString());
+    setting("daily_report_last_sent_date",new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Beirut"}).format(new Date()));
+    setting("daily_report_delivery_status","SENT");
+    audit("daily_arabic_report_sent",{entityType:"system_report",metadata:{manual,recipientConfigured:true,template:Boolean(templateName)}});
+    return {ok:true,status:"SENT",result};
+  }catch(e){
+    setting("daily_report_delivery_status","FAILED");
+    setting("daily_report_last_error",String(e.message||e));
+    audit("daily_arabic_report_failed",{entityType:"system_report",metadata:{manual,error:String(e.message||e)}});
+    return {ok:false,status:"FAILED",error:String(e.message||e),report};
+  }
+}
+
+async function dailyReportScheduler(){
+  if(stagingMode)return;
+  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Beirut",hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).formatToParts(new Date()).map(x=>[x.type,x.value]));
+  const localDate=`${parts.year}-${parts.month}-${parts.day}`;
+  const hour=Number(parts.hour||0),minute=Number(parts.minute||0);
+  const last=String(setting("daily_report_last_sent_date")||"");
+  const attempted=String(setting("daily_report_last_attempt_date")||"");
+  if(hour===9&&minute<15&&last!==localDate&&attempted!==localDate){
+    setting("daily_report_last_attempt_date",localDate);
+    await sendDailyArabicReport({manual:false});
+  }
+}
+
+app.get("/api/daily-report/status",(req,res)=>{
+  res.json({
+    ok:true,
+    enabled:true,
+    schedule:"09:00 Asia/Beirut",
+    recipientConfigured:hasSecret("whatsapp","report_recipient"),
+    whatsappConfigured:hasSecret("whatsapp","access_token")&&hasSecret("whatsapp","phone_number_id"),
+    templateConfigured:hasSecret("whatsapp","report_template_name"),
+    status:setting("daily_report_delivery_status")||"WAITING_FIRST_RUN",
+    lastSentAt:setting("daily_report_last_sent_at")||null,
+    lastGeneratedAt:setting("daily_report_latest_generated_at")||null,
+    lastError:setting("daily_report_last_error")||null,
+    preview:arabicDailyReportText()
+  });
+});
+app.post("/api/daily-report/send-now",async(req,res)=>{
+  const r=await sendDailyArabicReport({manual:true});
+  res.status(r.ok?200:409).json(r);
+});
+
 if(!stagingMode)setInterval(()=>runScheduledJobs().catch(()=>{}),30000);
 if(!stagingMode)setInterval(()=>publishingContinuityCycle().catch(()=>{}),5*60*1000);
+if(!stagingMode)setInterval(()=>dailyReportScheduler().catch(()=>{}),5*60*1000);
 setTimeout(()=>publishingContinuityCycle().catch(()=>{}),15000);
+setTimeout(()=>dailyReportScheduler().catch(()=>{}),20000);
 
 app.get("/api/continuity/status",requireAuth,async(req,res)=>{try{res.json({ok:true,...await publishingContinuityCycle()})}catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}});
 app.post("/api/continuity/run",requireAuth,async(req,res)=>{try{await runScheduledJobs();res.json({ok:true,...await publishingContinuityCycle()})}catch(e){res.status(500).json({ok:false,error:String(e.message||e)})}});
