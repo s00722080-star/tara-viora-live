@@ -421,9 +421,24 @@ app.post("/api/integrations/elevenlabs/check",async(req,res)=>{
   try{const r=await fetch("https://api.elevenlabs.io/v1/models",{headers:{"xi-api-key":key}});res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"ELEVENLABS_READY":"ELEVENLABS_AUTH_ERROR"});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
 });
 app.post("/api/integrations/meta/check",async(req,res)=>{
-  const token=getSecret("meta","access_token");if(!token)return res.status(409).json({ok:false,provider:"NOT_CONNECTED"});
+  try{
+    if(n8nBase){
+      const bridge=await postN8n("tara-viora-meta-bridge",{source:"command_center"});
+      const d=bridge.data||{};
+      if(bridge.ok&&d.provider){
+        return res.status(d.ok?200:409).json({
+          ok:Boolean(d.ok),
+          provider:d.provider,
+          source:"n8n_bridge",
+          account:d.ok?{id:d.account_id||null,name:d.account_name||null}:null,
+          error:d.error||null
+        });
+      }
+    }
+  }catch{}
+  const token=getSecret("meta","access_token");if(!token)return res.status(409).json({ok:false,provider:"NOT_CONNECTED",source:"local_vault"});
   const version=getSecret("meta","graph_version")||process.env.META_GRAPH_VERSION||"v24.0";
-  try{const r=await fetch(`https://graph.facebook.com/${version}/me?fields=id,name&access_token=${encodeURIComponent(token)}`);const d=await r.json().catch(()=>({}));res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"META_READY":"META_AUTH_ERROR",account:r.ok?{id:d.id,name:d.name}:null});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
+  try{const r=await fetch(`https://graph.facebook.com/${version}/me?fields=id,name&access_token=${encodeURIComponent(token)}`);const d=await r.json().catch(()=>({}));res.status(r.ok?200:502).json({ok:r.ok,provider:r.ok?"META_READY":"META_AUTH_ERROR",source:"local_vault",account:r.ok?{id:d.id,name:d.name}:null});}catch(e){res.status(502).json({ok:false,error:String(e.message||e)})}
 });
 async function discoverWhatsAppFromMeta(){
   const token=getSecret("meta","access_token")||process.env.META_ACCESS_TOKEN;
