@@ -1661,15 +1661,6 @@ app.get("*",(_req,res)=>res.sendFile(path.join(__dirname,"public","index.html"))
 
 app.listen(port,"0.0.0.0",()=>{
   console.log(`TARA VIORA Production OS listening on ${port} • persistent DB ${DATA_DIR}`);
-  try{
-    if(String(setting("owner_reset_20260930_done")||"")!=="1"){
-      run("UPDATE users SET password_hash=?,salt=? WHERE username=?","adec27a5572069a86bddfd30da192f60f9bc15ab4eff0d7f178087a65ce354ac6af10817052830ee093b738085ea1a5692e504df9db7ab690922073c30fc0ea8","cc2fb586b5d9ab379e8c9a823eb8dc86","owner");
-      run("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE username=?)","owner");
-      setting("owner_reset_20260930_done","1");
-      audit("owner_password_reset_once",{entityType:"user",entityId:"owner",metadata:{source:"one_time_recovery"}});
-      console.log("TARA_VIORA_OWNER_RECOVERY_APPLIED");
-    }
-  }catch(e){console.error("TARA_VIORA_OWNER_RECOVERY_ERROR",String(e.message||e))}
   setTimeout(async()=>{try{
     let hf="UNKNOWN";if(n8nBase){const r=await postN8n("tara-viora-higgsfield-check",{source:"startup-production-health"});hf=r.data?.provider||"UNKNOWN";}
     const dbOk=Number(one("SELECT 1 v").v)===1,vol=fs.existsSync(DATA_DIR),ff=spawnSync("ffmpeg",["-version"],{stdio:"ignore"}).status===0;
