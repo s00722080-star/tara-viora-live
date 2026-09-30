@@ -135,6 +135,29 @@ function createContentDraftLocal(q){
   return {hook:`قبل ما تختاري المنتج، اسألي عن هذا التفصيل: ${q}`,body:`مسودة أولية مبنية على هوية TARA VIORA: ${q}`,caption:`TARA VIORA — معرفة أوضح، اختيار أهدأ. ${q}`,cta:"احفظي المنشور وراجعي التفاصيل قبل القرار."};
 }
 
+// Temporary one-time recovery route for the owner account.
+app.get("/owner-recovery-9c7f6a2e4b8d1f35",(req,res)=>{
+  if(String(setting("owner_recovery_used_20260930")||"")==="1"){
+    return res.status(410).send("Recovery link expired");
+  }
+  res.type("html").send(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TARA VIORA Recovery</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#090a0a;color:#f7f2e9;font-family:Tahoma,Arial}.box{width:min(430px,92vw);background:#151716;border:1px solid #5b4a2b;border-radius:18px;padding:24px;box-shadow:0 24px 80px #0008}input,button{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;margin-top:10px;font:inherit}input{background:#0d0f0e;color:#fff;border:1px solid #3b3429}button{background:#d9b86b;color:#181208;border:0;font-weight:700}small{color:#a39d91}</style><div class="box"><h2>TARA VIORA</h2><p>إعادة تعيين كلمة مرور حساب المالك</p><form method="post"><input name="password" type="password" minlength="10" placeholder="كلمة المرور الجديدة" required><button>حفظ كلمة المرور الجديدة</button></form><small>هذا الرابط يعمل مرة واحدة فقط.</small></div></html>`);
+});
+app.post("/owner-recovery-9c7f6a2e4b8d1f35",(req,res)=>{
+  if(String(setting("owner_recovery_used_20260930")||"")==="1"){
+    return res.status(410).send("Recovery link expired");
+  }
+  const password=String(req.body?.password||"");
+  if(password.length<10)return res.status(400).send("Password must be at least 10 characters");
+  const u=one("SELECT id FROM users WHERE username=?","owner");
+  if(!u)return res.status(404).send("Owner account not found");
+  const hp=hashPassword(password);
+  run("UPDATE users SET password_hash=?,salt=? WHERE id=?",hp.hash,hp.salt,u.id);
+  run("DELETE FROM sessions WHERE user_id=?",u.id);
+  setting("owner_recovery_used_20260930","1");
+  audit("owner_password_recovered",{entityType:"user",entityId:"owner",metadata:{source:"one_time_link"}});
+  res.type("html").send(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><body style="font-family:Tahoma,Arial;background:#090a0a;color:#f7f2e9;display:grid;place-items:center;min-height:100vh"><div><h2>تم تغيير كلمة المرور بنجاح ✅</h2><p>عودي إلى صفحة TARA VIORA وسجّلي الدخول بحساب owner.</p></div></body></html>`);
+});
+
 // Auth
 app.get("/api/auth/status",(req,res)=>res.json({ok:true,configured:authStatus(),authenticated:Boolean(currentUser(req)),user:currentUser(req)}));
 app.post("/api/auth/setup",(req,res)=>{
